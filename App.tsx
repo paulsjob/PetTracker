@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { StaffDashboard } from './components/StaffDashboard';
 import { ClientTracker } from './components/ClientTracker';
@@ -18,24 +17,17 @@ export default function App() {
   const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState('');
   
-  // Track logged in doctor
   const [currentDoctor, setCurrentDoctor] = useState<Doctor | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   useEffect(() => {
-    // Check for direct link via URL parameters
     const params = new URLSearchParams(window.location.search);
     const patientId = params.get('id');
     const code = params.get('code');
 
     if (patientId) {
       setPrefilledId(patientId);
-      
-      // Prefill code if present in URL
-      if (code) {
-        setAccessCode(code);
-      }
-      
+      if (code) setAccessCode(code);
       setView('patient-login');
     }
   }, []);
@@ -46,7 +38,8 @@ export default function App() {
     setError('');
 
     try {
-      const doctor = await api.login(pin);
+      // FORCED SYNC: We explicitly use 'default' here to match your Supabase table
+      const doctor = await api.login(pin, 'default');
       if (doctor) {
         setCurrentDoctor(doctor);
         setView('staff-dashboard');
@@ -56,7 +49,7 @@ export default function App() {
         setPin('');
       }
     } catch (err) {
-      setError('Login failed.');
+      setError('Login failed. Check your connection.');
     } finally {
       setIsLoggingIn(false);
     }
@@ -79,11 +72,11 @@ export default function App() {
 
       if (patient) {
         setSelectedPatientId(patient.id);
-        setValidatedAccessCode(accessCode); // Persist code for hardened reads
+        setValidatedAccessCode(accessCode);
         setView('client-tracker');
         setAccessCode('');
         setManualPatientId('');
-        setPrefilledId(null); // Clear context once logged in
+        setPrefilledId(null);
       } else {
         setError('Invalid Patient ID or Access Code.');
       }
@@ -100,7 +93,6 @@ export default function App() {
   };
 
   const handlePatientLogout = () => {
-    // Clear URL params without refresh
     try {
       window.history.pushState({}, '', window.location.pathname);
     } catch (e) {
@@ -239,11 +231,6 @@ export default function App() {
                     ? "Verify your ID and enter the 6-digit Access Code from your paperwork." 
                     : "Enter your Patient ID and 6-digit Access Code from your paperwork."}
                 </p>
-                {prefilledId && (
-                  <p className="text-sm text-indigo-600 font-medium mt-1">
-                    Your Patient ID has been detected from the link.
-                  </p>
-                )}
               </div>
 
               <form onSubmit={handlePatientLogin}>
@@ -285,9 +272,6 @@ export default function App() {
                     autoFocus={!!prefilledId || accessCode.length === 0}
                     disabled={isLoggingIn}
                   />
-                  <p className="text-xs text-center text-gray-400 mt-2">
-                    Look for ‘Access Code’ on your intake or discharge paperwork.
-                  </p>
                 </div>
                 
                 {error && <div className="text-red-500 text-center mb-4 text-sm font-medium animate-pulse">{error}</div>}
@@ -344,10 +328,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F3F4F6] relative overflow-hidden font-sans">
-      {/* Background decoration */}
       <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-b-[3rem] shadow-2xl z-0"></div>
-      
-      {/* Main Container */}
       <div className="relative z-10 p-4 md:p-8">
         {renderContent()}
       </div>
