@@ -15,12 +15,12 @@ export default async function handler(req, res) {
   const { to, body } = req.body;
 
   try {
-    // If we have a Messaging Service SID, use it (required for A2P compliance)
     const messageConfig = {
       to: to,
       body: body,
     };
 
+    // This is the critical part: It tells Twilio to use your A2P Messaging Service
     if (messagingServiceSid) {
       messageConfig.messagingServiceSid = messagingServiceSid;
     } else {
