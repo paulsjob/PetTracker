@@ -10,6 +10,8 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
       },
       plugins: [react()],
+      // This is the critical line that allows Vite to see your Vercel variables
+      envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
