@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { supabase } from '../services/supabase';
 import { Patient, Doctor, StageId, PatientStageEvent } from '../types';
-import { STAGES, DEMO_MODE } from '../constants';
+import { STAGES, CLINIC_ID } from '../constants';
 import { 
-  Plus, Search, LogOut, Clock, User, Dog, Stethoscope, 
-  History, ChevronDown, ChevronUp, Send, Loader2, Phone, Eye
+  Plus, LogOut, Dog, Stethoscope, 
+  History, ChevronDown, ChevronUp, Send, Loader2, User
 } from 'lucide-react';
 
 interface StaffDashboardProps {
@@ -13,24 +13,32 @@ interface StaffDashboardProps {
   doctor: Doctor;
 }
 
-const QUICK_NOTES = ["Doing well", "Vitals stable", "In progress", "Waking up", "Ready soon", "Call pending"];
-
 export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor }) => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [sendingSms, setSendingSms] = useState<Record<string, boolean>>({});
   const [newPatient, setNewPatient] = useState({ name: '', owner: '', owner_phone: '' });
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
-  const [viewMode, setViewMode] = useState<'active' | 'discharged'>('active');
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [advancedOpen, setAdvancedOpen] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Strict Filter: Fetch only patients assigned to this specific doctor's ID
   const loadData = async (options?: { silent?: boolean }) => {
     try {
-      const data = await api.getPatients(doctor.id);
-      setPatients(data);
+      if (!supabase) return;
+      
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('clinic_id', CLINIC_ID)
+        .eq('doctor_id', doctor.id) // This is the privacy lock
+        .eq('status', 'active')
+        .order('updated_at', { ascending: false });
+      
+      if (error) throw error;
+      setPatients((data || []) as Patient[]);
     } catch (error) {
       if (!options?.silent) showNotification('Sync Error', 'error');
     } finally {
@@ -40,9 +48,17 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
   useEffect(() => {
     loadData();
-    const channel = supabase.channel('patients-live').on('postgres_changes', 
-      { event: '*', schema: 'public', table: 'patients' }, () => loadData({ silent: true })).subscribe();
-    return () => { supabase.removeChannel(channel); };
+    const channel = supabase?.channel('patients-live').on('postgres_changes', 
+      { 
+        event: '*', 
+        schema: 'public', 
+        table: 'patients',
+        filter: `doctor_id=eq.${doctor.id}` // Only listen for THIS doctor's patients
+      }, 
+      () => loadData({ silent: true })
+    ).subscribe();
+    
+    return () => { if (channel) supabase?.removeChannel(channel); };
   }, [doctor.id]);
 
   const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -54,20 +70,19 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     e.preventDefault();
     if (!newPatient.name || !newPatient.owner) return;
     try {
-      // This sends the owner_phone to your Supabase table
       await api.createPatient(newPatient, doctor.id);
       setNewPatient({ name: '', owner: '', owner_phone: '' });
       showNotification('Patient checked in successfully');
       loadData({ silent: true });
     } catch (error) {
-      showNotification('Failed to save phone number', 'error');
+      showNotification('Failed to save patient', 'error');
     }
   };
 
   const handleSendSMS = async (patient: Patient) => {
-    const phone = (patient as any).owner_phone;
+    const phone = patient.owner_phone;
     if (!phone) {
-      showNotification("No phone number saved for this patient", "error");
+      showNotification("No phone number saved", "error");
       return;
     }
 
@@ -81,7 +96,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: phone,
-          body: `[PetTracker] Update for ${patient.name}: Status is now ${stageLabel}. Track live: ${clientLink} Reply STOP to opt-out.`
+          body: `[PetTracker] Update for ${patient.name}: Status is now ${stageLabel}. Track live: ${clientLink}`
         }),
       });
       const data = await response.json();
@@ -102,8 +117,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     } catch (error) { showNotification('Update failed', 'error'); }
   };
 
-  const filteredPatients = patients.filter(p => p.status === viewMode && 
-    (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.owner.toLowerCase().includes(searchQuery.toLowerCase())));
+  const filteredPatients = patients.filter(p => 
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    p.owner.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="max-w-7xl mx-auto pb-20 p-4">
@@ -121,31 +138,34 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg font-medium hover:bg-slate-200 transition-colors"><LogOut size={18} /> Logout</button>
       </div>
 
-      {viewMode === 'active' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-8">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><Plus className="text-indigo-600" /> Check In New Patient</h2>
-          <form onSubmit={handleAddPatient} className="grid grid-cols-1 md:grid-cols-12 gap-4">
-            <div className="md:col-span-3">
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Pet Name</label>
-              <input type="text" value={newPatient.name} onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. Bella" />
-            </div>
-            <div className="md:col-span-3">
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Owner Name</label>
-              <input type="text" value={newPatient.owner} onChange={(e) => setNewPatient({ ...newPatient, owner: e.target.value })} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. John Smith" />
-            </div>
-            <div className="md:col-span-3">
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Owner Phone</label>
-              <input type="tel" value={newPatient.owner_phone} onChange={(e) => setNewPatient({ ...newPatient, owner_phone: e.target.value })} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="+1914..." />
-            </div>
-            <div className="md:col-span-3 flex items-end">
-              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg shadow-md transition-all">Check In</button>
-            </div>
-          </form>
-        </div>
-      )}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">Check In New Patient</h2>
+        <form onSubmit={handleAddPatient} className="grid grid-cols-1 md:grid-cols-12 gap-4">
+          <div className="md:col-span-3">
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Pet Name</label>
+            <input type="text" value={newPatient.name} onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Bella" />
+          </div>
+          <div className="md:col-span-3">
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Owner Name</label>
+            <input type="text" value={newPatient.owner} onChange={(e) => setNewPatient({ ...newPatient, owner: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="John Smith" />
+          </div>
+          <div className="md:col-span-3">
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Owner Phone</label>
+            <input type="tel" value={newPatient.owner_phone} onChange={(e) => setNewPatient({ ...newPatient, owner_phone: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="+1..." />
+          </div>
+          <div className="md:col-span-3 flex items-end">
+            <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg shadow-md transition-all">Check In</button>
+          </div>
+        </form>
+      </div>
 
       <div className="space-y-4">
-        {filteredPatients.map(patient => (
+        {filteredPatients.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">
+            <Dog size={48} className="mx-auto mb-4 opacity-20" />
+            <p className="font-medium">No active patients for {doctor.name}.</p>
+          </div>
+        ) : filteredPatients.map(patient => (
           <div key={patient.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="p-6">
               <div className="flex justify-between items-start mb-6">
@@ -164,20 +184,22 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
               </div>
 
               {advancedOpen[patient.id] && (
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 animate-in fade-in slide-in-from-top-2">
-                  <div className="mb-4">
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Internal Staff Note</label>
-                    <textarea value={noteDrafts[patient.id] || patient.note || ''} onChange={(e) => setNoteDrafts({...noteDrafts, [patient.id]: e.target.value})} className="w-full p-3 text-sm border rounded-lg h-20 outline-none focus:ring-2 focus:ring-indigo-50" placeholder="Internal commentary..." />
-                  </div>
-                  <div className="flex justify-between items-center pt-2 border-t">
-                    <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline"><History size={14}/> View History</button>
-                    <span className="text-xs font-mono text-slate-400">Access Code: {patient.access_code}</span>
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
+                  <textarea 
+                    value={noteDrafts[patient.id] || patient.note || ''} 
+                    onChange={(e) => setNoteDrafts({...noteDrafts, [patient.id]: e.target.value})} 
+                    className="w-full p-3 text-sm border rounded-lg h-20 outline-none focus:ring-2 focus:ring-indigo-50" 
+                    placeholder="Internal staff note..." 
+                  />
+                  <div className="flex justify-between items-center pt-2 mt-2 border-t">
+                    <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-bold text-indigo-600 flex items-center gap-1"><History size={14}/> View History</button>
+                    <span className="text-xs font-mono text-slate-400">Code: {patient.access_code}</span>
                   </div>
                   {historyOpen[patient.id] && (
                     <div className="mt-4 space-y-2 border-t pt-4">
                       {patient.stage_history?.map((event, i) => (
                         <div key={i} className="text-xs text-slate-500 border-l-2 border-indigo-200 pl-3 ml-1">
-                          Moved to <span className="font-bold">{STAGES.find(s => s.id === event.to_stage)?.label}</span> at {new Date(event.changed_at).toLocaleTimeString()}
+                          {STAGES.find(s => s.id === event.to_stage)?.label} at {new Date(event.changed_at).toLocaleTimeString()}
                         </div>
                       ))}
                     </div>
