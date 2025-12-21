@@ -1,18 +1,18 @@
-
 import { Clock, Stethoscope, Activity, Heart, CheckCircle, FileText } from 'lucide-react';
 
-// Configuration
-export const CLINIC_ID = 'local-demo-clinic';
+// Syncing with your Supabase 'clinic_id' column
+export const CLINIC_ID = 'default';
 
 export const CLINIC_CONFIG = {
   name: 'PetTracker',
   phone: '(555) 123-4567',
   hours: 'Mon–Fri 8am–6pm, Sat 9am–1pm',
-  email: 'hello@vettrack.demo',
+  email: 'hello@vettrack.pro',
   sms: '(555) 123-4567'
 };
 
-export const DEMO_MODE = true;
+// Setting this to false removes the 1111/2222/3333 demo buttons
+export const DEMO_MODE = false;
 
 export const STAGES = [
   { 
