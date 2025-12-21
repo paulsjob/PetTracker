@@ -1,8 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 
-// --- SUPABASE CONFIGURATION ---
-const supabaseUrl = 'https://hzsbxwjdgwkxewfkciud.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6c2J4d2pkZ3dreGV3ZmtjaXVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1NzIxMDgsImV4cCI6MjA4MTE0ODEwOH0.Z0WhmTVMD4EUv9n2CiMmE24t95UdOSlc43a53b5Pc1Y';
-// ------------------------------
+// Access environment variables (Vercel injects these automatically)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('Supabase credentials missing. App will run in Demo Mode (Local Only).');
+}
+
+// Create the client
+// We use a conditional check so the app doesn't crash if keys are missing during local dev
+export const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
