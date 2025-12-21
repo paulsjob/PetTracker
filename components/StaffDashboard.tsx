@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { supabase } from '../services/supabase';
-import { Patient, Doctor, StageId, PatientStageEvent } from '../types';
-import { STAGES, CLINIC_ID } from '../constants';
+import { Patient, Doctor, StageId } from '../types';
+import { STAGES } from '../constants';
 import { 
   Plus, LogOut, Dog, Stethoscope, 
   History, ChevronDown, ChevronUp, Send, Loader2, User
 } from 'lucide-react';
+
+// SYNC: Matches the exact ID appearing in your Supabase screenshot (image_c29ae2)
+const ACTIVE_CLINIC_ID = 'local-demo-clinic';
 
 interface StaffDashboardProps {
   onLogout: () => void;
@@ -24,21 +27,23 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const [advancedOpen, setAdvancedOpen] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Strict Filter: Fetch only patients assigned to this specific doctor's ID
   const loadData = async (options?: { silent?: boolean }) => {
     try {
       if (!supabase) return;
       
+      // We pull for 'local-demo-clinic' to match your database screenshot (image_c29ae2)
       const { data, error } = await supabase
         .from('patients')
         .select('*')
-        .eq('clinic_id', CLINIC_ID)
-        .eq('doctor_id', doctor.id) // This is the privacy lock
+        .eq('clinic_id', ACTIVE_CLINIC_ID)
         .eq('status', 'active')
         .order('updated_at', { ascending: false });
       
       if (error) throw error;
-      setPatients((data || []) as Patient[]);
+
+      // Privacy Filter: Only show patients that belong to the logged-in doctor
+      const myPatients = (data || []).filter((p: Patient) => p.doctor_id === doctor.id);
+      setPatients(myPatients as Patient[]);
     } catch (error) {
       if (!options?.silent) showNotification('Sync Error', 'error');
     } finally {
@@ -49,12 +54,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   useEffect(() => {
     loadData();
     const channel = supabase?.channel('patients-live').on('postgres_changes', 
-      { 
-        event: '*', 
-        schema: 'public', 
-        table: 'patients',
-        filter: `doctor_id=eq.${doctor.id}` // Only listen for THIS doctor's patients
-      }, 
+      { event: '*', schema: 'public', table: 'patients' }, 
       () => loadData({ silent: true })
     ).subscribe();
     
@@ -70,10 +70,21 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     e.preventDefault();
     if (!newPatient.name || !newPatient.owner) return;
     try {
-      await api.createPatient(newPatient, doctor.id);
+      // Force patient creation under the correct clinic ID from your screenshot
+      const accessCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const { error } = await supabase.from('patients').insert([{
+        ...newPatient,
+        clinic_id: ACTIVE_CLINIC_ID,
+        doctor_id: doctor.id,
+        stage: 'checked-in',
+        status: 'active',
+        access_code: accessCode,
+        stage_history: []
+      }]);
+
+      if (error) throw error;
       setNewPatient({ name: '', owner: '', owner_phone: '' });
       showNotification('Patient checked in successfully');
-      loadData({ silent: true });
     } catch (error) {
       showNotification('Failed to save patient', 'error');
     }
@@ -143,11 +154,11 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         <form onSubmit={handleAddPatient} className="grid grid-cols-1 md:grid-cols-12 gap-4">
           <div className="md:col-span-3">
             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Pet Name</label>
-            <input type="text" value={newPatient.name} onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Bella" />
+            <input type="text" value={newPatient.name} onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Pet name" />
           </div>
           <div className="md:col-span-3">
             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Owner Name</label>
-            <input type="text" value={newPatient.owner} onChange={(e) => setNewPatient({ ...newPatient, owner: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="John Smith" />
+            <input type="text" value={newPatient.owner} onChange={(e) => setNewPatient({ ...newPatient, owner: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Owner name" />
           </div>
           <div className="md:col-span-3">
             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Owner Phone</label>
