@@ -4,10 +4,8 @@ import { supabase } from '../services/supabase';
 import { Patient, Doctor, StageId, PatientStageEvent } from '../types';
 import { STAGES, DEMO_MODE } from '../constants';
 import { 
-  Plus, Trash2, Search, LogOut, Clock, User, Dog, Stethoscope, 
-  Key, Archive, MessageSquare, Eye, RotateCcw, 
-  History, ChevronDown, ChevronUp, Send, 
-  ShieldCheck, Download, AlertTriangle, Loader2, Phone
+  Plus, Search, LogOut, Clock, User, Dog, Stethoscope, 
+  History, ChevronDown, ChevronUp, Send, Loader2, Phone, Eye
 } from 'lucide-react';
 
 interface StaffDashboardProps {
@@ -15,9 +13,7 @@ interface StaffDashboardProps {
   doctor: Doctor;
 }
 
-const QUICK_NOTES = [
-  "Doing well", "Vitals stable", "In progress", "Waking up", "Ready soon", "Call pending"
-];
+const QUICK_NOTES = ["Doing well", "Vitals stable", "In progress", "Waking up", "Ready soon", "Call pending"];
 
 export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor }) => {
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -25,20 +21,13 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const [sendingSms, setSendingSms] = useState<Record<string, boolean>>({});
   const [newPatient, setNewPatient] = useState({ name: '', owner: '', owner_phone: '' });
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
-  const [revealedCodes, setRevealedCodes] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<'active' | 'discharged'>('active');
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [advancedOpen, setAdvancedOpen] = useState<Record<string, boolean>>({});
-  const [confirmDischargeId, setConfirmDischargeId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchingRef = useRef(false);
-  const lastInteractionRef = useRef<Record<string, number>>({});
-
   const loadData = async (options?: { silent?: boolean }) => {
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
     try {
       const data = await api.getPatients(doctor.id);
       setPatients(data);
@@ -46,16 +35,13 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       if (!options?.silent) showNotification('Sync Error', 'error');
     } finally {
       setLoading(false);
-      fetchingRef.current = false;
     }
   };
 
   useEffect(() => {
     loadData();
-    const channel = supabase.channel('public:patients').on('postgres_changes', 
-      { event: 'UPDATE', schema: 'public', table: 'patients' }, (payload) => {
-      setPatients((current) => current.map((p) => (p.id === payload.new.id ? { ...p, ...payload.new } : p)));
-    }).subscribe();
+    const channel = supabase.channel('patients-live').on('postgres_changes', 
+      { event: '*', schema: 'public', table: 'patients' }, () => loadData({ silent: true })).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [doctor.id]);
 
@@ -68,23 +54,27 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     e.preventDefault();
     if (!newPatient.name || !newPatient.owner) return;
     try {
+      // This sends the owner_phone to your Supabase table
       await api.createPatient(newPatient, doctor.id);
       setNewPatient({ name: '', owner: '', owner_phone: '' });
-      showNotification('Patient checked in');
+      showNotification('Patient checked in successfully');
       loadData({ silent: true });
-    } catch (error) { showNotification('Failed to check in', 'error'); }
+    } catch (error) {
+      showNotification('Failed to save phone number', 'error');
+    }
   };
 
   const handleSendSMS = async (patient: Patient) => {
     const phone = (patient as any).owner_phone;
     if (!phone) {
-        showNotification("No phone number saved for this patient", "error");
-        return;
+      showNotification("No phone number saved for this patient", "error");
+      return;
     }
+
     setSendingSms(prev => ({ ...prev, [patient.id]: true }));
     const stageLabel = STAGES.find(s => s.id === patient.stage)?.label || 'Checked In';
-    const clientLink = `${window.location.origin}${window.location.pathname}?id=${patient.id}&code=${patient.access_code}`;
-    
+    const clientLink = `${window.location.origin}/?id=${patient.id}&code=${patient.access_code}`;
+
     try {
       const response = await fetch('/api/send-sms', {
         method: 'POST',
@@ -97,12 +87,14 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       const data = await response.json();
       if (data.success) showNotification(`SMS sent to ${phone}`);
       else showNotification(`SMS Failed: ${data.error}`, 'error');
-    } catch (err) { showNotification('SMS Connection Error', 'error'); }
-    finally { setSendingSms(prev => ({ ...prev, [patient.id]: false })); }
+    } catch (err) {
+      showNotification('Connection error', 'error');
+    } finally {
+      setSendingSms(prev => ({ ...prev, [patient.id]: false }));
+    }
   };
 
   const handleStatusUpdate = async (id: string, newStage: StageId) => {
-    lastInteractionRef.current[id] = Date.now();
     try {
       await api.updateStage(id, newStage, doctor.id, noteDrafts[id]);
       showNotification('Status updated');
@@ -121,7 +113,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         </div>
       )}
 
-      <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Stethoscope className="text-indigo-600"/> {doctor.name}</h1>
           <p className="text-indigo-600 font-medium">{doctor.specialty}</p>
@@ -175,16 +167,18 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 animate-in fade-in slide-in-from-top-2">
                   <div className="mb-4">
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Internal Staff Note</label>
-                    <textarea value={noteDrafts[patient.id] || patient.note || ''} onChange={(e) => setNoteDrafts({...noteDrafts, [patient.id]: e.target.value})} className="w-full p-3 text-sm border rounded-lg h-20 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Internal commentary..." />
+                    <textarea value={noteDrafts[patient.id] || patient.note || ''} onChange={(e) => setNoteDrafts({...noteDrafts, [patient.id]: e.target.value})} className="w-full p-3 text-sm border rounded-lg h-20 outline-none focus:ring-2 focus:ring-indigo-50" placeholder="Internal commentary..." />
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t">
-                    <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-bold text-indigo-600 flex items-center gap-1"><History size={14}/> View History</button>
-                    <span className="text-xs font-mono text-slate-400">Code: {patient.access_code}</span>
+                    <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline"><History size={14}/> View History</button>
+                    <span className="text-xs font-mono text-slate-400">Access Code: {patient.access_code}</span>
                   </div>
                   {historyOpen[patient.id] && (
                     <div className="mt-4 space-y-2 border-t pt-4">
                       {patient.stage_history?.map((event, i) => (
-                        <div key={i} className="text-xs text-slate-500 border-l-2 pl-3 ml-1">Moved to {STAGES.find(s => s.id === event.to_stage)?.label} at {new Date(event.changed_at).toLocaleTimeString()}</div>
+                        <div key={i} className="text-xs text-slate-500 border-l-2 border-indigo-200 pl-3 ml-1">
+                          Moved to <span className="font-bold">{STAGES.find(s => s.id === event.to_stage)?.label}</span> at {new Date(event.changed_at).toLocaleTimeString()}
+                        </div>
                       ))}
                     </div>
                   )}
