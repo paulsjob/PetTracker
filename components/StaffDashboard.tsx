@@ -8,7 +8,7 @@ import {
   History, ChevronDown, ChevronUp, Send, Loader2, User
 } from 'lucide-react';
 
-// SYNC: Matches the exact ID appearing in your Supabase screenshot (image_c29ae2)
+// SYNC: We keep this hardcoded to your existing patients in image_c29ae2.png
 const ACTIVE_CLINIC_ID = 'local-demo-clinic';
 
 interface StaffDashboardProps {
@@ -30,8 +30,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const loadData = async (options?: { silent?: boolean }) => {
     try {
       if (!supabase) return;
-      
-      // We pull for 'local-demo-clinic' to match your database screenshot (image_c29ae2)
       const { data, error } = await supabase
         .from('patients')
         .select('*')
@@ -40,8 +38,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         .order('updated_at', { ascending: false });
       
       if (error) throw error;
-
-      // Privacy Filter: Only show patients that belong to the logged-in doctor
+      // Filter for Dr. Chen's ID 'doc-internal'
       const myPatients = (data || []).filter((p: Patient) => p.doctor_id === doctor.id);
       setPatients(myPatients as Patient[]);
     } catch (error) {
@@ -54,10 +51,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   useEffect(() => {
     loadData();
     const channel = supabase?.channel('patients-live').on('postgres_changes', 
-      { event: '*', schema: 'public', table: 'patients' }, 
-      () => loadData({ silent: true })
-    ).subscribe();
-    
+      { event: '*', schema: 'public', table: 'patients' }, () => loadData({ silent: true })).subscribe();
     return () => { if (channel) supabase?.removeChannel(channel); };
   }, [doctor.id]);
 
@@ -68,35 +62,39 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
   const handleAddPatient = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPatient.name || !newPatient.owner) return;
+    if (!newPatient.name || !newPatient.owner || !supabase) return;
     try {
-      // Force patient creation under the correct clinic ID from your screenshot
+      // FIX: Generate a random ID to satisfy the database primary key requirement
+      const patientId = Math.random().toString(36).substring(2, 14);
       const accessCode = Math.floor(100000 + Math.random() * 900000).toString();
+      
       const { error } = await supabase.from('patients').insert([{
-        ...newPatient,
+        id: patientId,
+        name: newPatient.name,
+        owner: newPatient.owner,
+        owner_phone: newPatient.owner_phone || null,
         clinic_id: ACTIVE_CLINIC_ID,
         doctor_id: doctor.id,
         stage: 'checked-in',
         status: 'active',
         access_code: accessCode,
-        stage_history: []
+        stage_history: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       }]);
 
       if (error) throw error;
       setNewPatient({ name: '', owner: '', owner_phone: '' });
       showNotification('Patient checked in successfully');
-    } catch (error) {
-      showNotification('Failed to save patient', 'error');
+      loadData({ silent: true });
+    } catch (error: any) {
+      showNotification(`Failed: ${error.message || 'Check connection'}`, 'error');
     }
   };
 
   const handleSendSMS = async (patient: Patient) => {
     const phone = patient.owner_phone;
-    if (!phone) {
-      showNotification("No phone number saved", "error");
-      return;
-    }
-
+    if (!phone) { showNotification("No phone number saved", "error"); return; }
     setSendingSms(prev => ({ ...prev, [patient.id]: true }));
     const stageLabel = STAGES.find(s => s.id === patient.stage)?.label || 'Checked In';
     const clientLink = `${window.location.origin}/?id=${patient.id}&code=${patient.access_code}`;
@@ -105,19 +103,12 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       const response = await fetch('/api/send-sms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: phone,
-          body: `[PetTracker] Update for ${patient.name}: Status is now ${stageLabel}. Track live: ${clientLink}`
-        }),
+        body: JSON.stringify({ to: phone, body: `[PetTracker] Update for ${patient.name}: Status is now ${stageLabel}. Track live: ${clientLink}` }),
       });
       const data = await response.json();
       if (data.success) showNotification(`SMS sent to ${phone}`);
       else showNotification(`SMS Failed: ${data.error}`, 'error');
-    } catch (err) {
-      showNotification('Connection error', 'error');
-    } finally {
-      setSendingSms(prev => ({ ...prev, [patient.id]: false }));
-    }
+    } catch (err) { showNotification('Connection error', 'error'); } finally { setSendingSms(prev => ({ ...prev, [patient.id]: false })); }
   };
 
   const handleStatusUpdate = async (id: string, newStage: StageId) => {
@@ -128,10 +119,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     } catch (error) { showNotification('Update failed', 'error'); }
   };
 
-  const filteredPatients = patients.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    p.owner.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredPatients = patients.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.owner.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <div className="max-w-7xl mx-auto pb-20 p-4">
@@ -140,7 +128,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
           {notification.msg}
         </div>
       )}
-
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Stethoscope className="text-indigo-600"/> {doctor.name}</h1>
@@ -148,17 +135,16 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         </div>
         <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg font-medium hover:bg-slate-200 transition-colors"><LogOut size={18} /> Logout</button>
       </div>
-
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-8">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">Check In New Patient</h2>
+        <h2 className="text-lg font-semibold mb-4">Check In New Patient</h2>
         <form onSubmit={handleAddPatient} className="grid grid-cols-1 md:grid-cols-12 gap-4">
           <div className="md:col-span-3">
             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Pet Name</label>
-            <input type="text" value={newPatient.name} onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Pet name" />
+            <input type="text" value={newPatient.name} onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. Bella" />
           </div>
           <div className="md:col-span-3">
             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Owner Name</label>
-            <input type="text" value={newPatient.owner} onChange={(e) => setNewPatient({ ...newPatient, owner: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Owner name" />
+            <input type="text" value={newPatient.owner} onChange={(e) => setNewPatient({ ...newPatient, owner: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. John Smith" />
           </div>
           <div className="md:col-span-3">
             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Owner Phone</label>
@@ -169,7 +155,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
           </div>
         </form>
       </div>
-
       <div className="space-y-4">
         {filteredPatients.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">
@@ -193,31 +178,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                   </button>
                 </div>
               </div>
-
               {advancedOpen[patient.id] && (
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
-                  <textarea 
-                    value={noteDrafts[patient.id] || patient.note || ''} 
-                    onChange={(e) => setNoteDrafts({...noteDrafts, [patient.id]: e.target.value})} 
-                    className="w-full p-3 text-sm border rounded-lg h-20 outline-none focus:ring-2 focus:ring-indigo-50" 
-                    placeholder="Internal staff note..." 
-                  />
+                  <textarea value={noteDrafts[patient.id] || patient.note || ''} onChange={(e) => setNoteDrafts({...noteDrafts, [patient.id]: e.target.value})} className="w-full p-3 text-sm border rounded-lg h-20 outline-none focus:ring-2 focus:ring-indigo-50" placeholder="Internal staff note..." />
                   <div className="flex justify-between items-center pt-2 mt-2 border-t">
                     <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-bold text-indigo-600 flex items-center gap-1"><History size={14}/> View History</button>
                     <span className="text-xs font-mono text-slate-400">Code: {patient.access_code}</span>
                   </div>
-                  {historyOpen[patient.id] && (
-                    <div className="mt-4 space-y-2 border-t pt-4">
-                      {patient.stage_history?.map((event, i) => (
-                        <div key={i} className="text-xs text-slate-500 border-l-2 border-indigo-200 pl-3 ml-1">
-                          {STAGES.find(s => s.id === event.to_stage)?.label} at {new Date(event.changed_at).toLocaleTimeString()}
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
-
               <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
                 {STAGES.map((stage) => (
                   <button key={stage.id} onClick={() => handleStatusUpdate(patient.id, stage.id)} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${patient.stage === stage.id ? `${stage.color} border-transparent text-white shadow-lg scale-105` : 'bg-white border-slate-100 text-slate-500 hover:bg-slate-50'}`}>
