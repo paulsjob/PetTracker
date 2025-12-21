@@ -1,8 +1,10 @@
 import { supabase } from './supabase';
 import { Patient, Doctor, StageId, PatientStageEvent } from '../types';
 
+const CLINIC_ID = 'default';
+
 export const api = {
-  login: async (pin: string, clinicId: string = 'default'): Promise<Doctor | null> => {
+  login: async (pin: string, clinicId: string = CLINIC_ID): Promise<Doctor | null> => {
     if (!supabase) return null;
     const { data, error } = await supabase
       .from('doctors')
@@ -14,7 +16,8 @@ export const api = {
     return data as Doctor | null;
   },
 
-  getPatientForClient: async (id: string, code: string): Promise<Patient | null> => {
+  // RESTORED: App.tsx requires this function for parent logins
+  loginPatientWithId: async (id: string, code: string): Promise<Patient | null> => {
     if (!supabase) return null;
     const { data, error } = await supabase
       .from('patients')
@@ -24,6 +27,10 @@ export const api = {
       .maybeSingle();
     if (error) return null;
     return data as Patient | null;
+  },
+
+  getPatientForClient: async (id: string, code: string): Promise<Patient | null> => {
+    return api.loginPatientWithId(id, code);
   },
 
   updateStage: async (id: string, stage: StageId, doctorId: string, note?: string): Promise<void> => {
