@@ -7,7 +7,7 @@ import {
   Plus, Trash2, Search, LogOut, Clock, User, Dog, Stethoscope, 
   Key, Archive, X, MessageSquare, ArrowUpDown, Eye, RotateCcw, 
   History, ChevronDown, ChevronUp, Database, FileText, Send, 
-  ShieldCheck, Download, AlertTriangle
+  ShieldCheck, Download, AlertTriangle, Loader2
 } from 'lucide-react';
 
 interface StaffDashboardProps {
@@ -27,6 +27,7 @@ const QUICK_NOTES = [
 export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor }) => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sendingSms, setSendingSms] = useState<Record<string, boolean>>({});
   const [newPatient, setNewPatient] = useState({ name: '', owner: '' });
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [revealedCodes, setRevealedCodes] = useState<Record<string, boolean>>({});
@@ -182,6 +183,40 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     }
   };
 
+  const handleSendSMS = async (patient: Patient) => {
+    // You'll need to make sure 'owner_phone' exists in your patient type/database.
+    // If not, we can prompt for it or use a default for testing.
+    const phone = (patient as any).owner_phone || prompt("Enter owner's mobile number:", "+1");
+    if (!phone) return;
+
+    setSendingSms(prev => ({ ...prev, [patient.id]: true }));
+    
+    const stageLabel = STAGES.find(s => s.id === patient.stage)?.label || 'Checked In';
+    const clientLink = `${window.location.origin}${window.location.pathname}?id=${patient.id}&code=${patient.access_code}`;
+    
+    try {
+      const response = await fetch('/api/send-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: phone,
+          body: `Update for ${patient.name}: Status is now ${stageLabel}. Track live here: ${clientLink}`
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        showNotification(`SMS update sent to ${phone}`);
+      } else {
+        showNotification(`SMS Failed: ${data.error}`, 'error');
+      }
+    } catch (err) {
+      showNotification('Could not connect to SMS service', 'error');
+    } finally {
+      setSendingSms(prev => ({ ...prev, [patient.id]: false }));
+    }
+  };
+
   const executeDischarge = async () => {
     if (!confirmDischargeId) return;
     const id = confirmDischargeId;
@@ -216,15 +251,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     const baseUrl = window.location.origin + window.location.pathname;
     const url = `${baseUrl}?id=${patient.id}&code=${patient.access_code}`;
     window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
-  const copyClientUpdate = (patient: Patient) => {
-    const baseUrl = window.location.origin + window.location.pathname;
-    const clientLink = `${baseUrl}?id=${patient.id}`;
-    const message = `Hi! You can follow your pet’s status here:\n\nLink: ${clientLink}\n\nPatient ID: ${patient.id}\nAccess Code: ${patient.access_code}\n\nOpen the link and enter the access code when prompted.`;
-    navigator.clipboard.writeText(message).then(() => {
-      showNotification('Client update copied. Paste into text or email.');
-    });
   };
 
   const copyAutoLoginLink = (patient: Patient) => {
@@ -392,8 +418,13 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                   </div>
                   
                   <div className="flex flex-col sm:flex-row w-full sm:w-auto items-stretch sm:items-center gap-2">
-                    <button onClick={() => copyClientUpdate(patient)} className="flex items-center justify-center gap-2 px-5 py-2.5 w-full sm:w-auto text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm font-bold transition-all shadow-sm hover:shadow-md">
-                      <Send size={16} /> Send Client Update
+                    <button 
+                      onClick={() => handleSendSMS(patient)} 
+                      disabled={sendingSms[patient.id]}
+                      className="flex items-center justify-center gap-2 px-5 py-2.5 w-full sm:w-auto text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 rounded-lg text-sm font-bold transition-all shadow-sm hover:shadow-md"
+                    >
+                      {sendingSms[patient.id] ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />} 
+                      {sendingSms[patient.id] ? 'Sending...' : 'Send Client Update'}
                     </button>
                     <button onClick={() => handlePreview(patient)} className="flex items-center justify-center gap-2 px-4 py-2 w-full sm:w-auto text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-bold transition-colors">
                       <Eye size={16} /> Preview
