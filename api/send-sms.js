@@ -34,4 +34,4 @@ export default async function handler(req, res) {
     console.error('Twilio Error:', error);
     return res.status(500).json({ error: 'Failed to send SMS', details: error.message });
   }
-}A
+}
