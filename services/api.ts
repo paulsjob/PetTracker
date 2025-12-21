@@ -4,19 +4,19 @@ import { Patient, Doctor, StageId, PatientStageEvent } from '../types';
 const CLINIC_ID = 'default';
 
 export const api = {
-  login: async (pin: string): Promise<Doctor | null> => {
+  // Updated to accept the optional clinicId argument used in App.tsx login
+  login: async (pin: string, clinicId: string = CLINIC_ID): Promise<Doctor | null> => {
     if (!supabase) return null;
     const { data, error } = await supabase
       .from('doctors')
       .select('*')
-      .eq('clinic_id', CLINIC_ID)
+      .eq('clinic_id', clinicId)
       .eq('pin', pin)
       .maybeSingle();
     if (error) return null;
     return data as Doctor | null;
   },
 
-  // This is the function App.tsx is looking for
   loginPatientWithId: async (id: string, code: string): Promise<Patient | null> => {
     if (!supabase) return null;
     const { data, error } = await supabase
