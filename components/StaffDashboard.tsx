@@ -5,7 +5,7 @@ import { Patient, Doctor, StageId } from '../types';
 import { STAGES } from '../constants';
 import { 
   Plus, LogOut, Dog, Stethoscope, History, ChevronDown, ChevronUp, 
-  Send, Loader2, User, Eye, Archive, Copy, Check, AlertTriangle, FileDown
+  Send, Loader2, User, Eye, Archive, Copy, Check, AlertTriangle, FileDown, CheckCircle
 } from 'lucide-react';
 
 const ACTIVE_CLINIC_ID = 'local-demo-clinic';
@@ -42,8 +42,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       if (error) throw error;
       const myPatients = (data || []).filter((p: Patient) => p.doctor_id === doctor.id);
       setPatients(myPatients as Patient[]);
-    } catch (error) { if (!options?.silent) showNotification('Sync Error', 'error');
-    }
+    } catch (error) { if (!options?.silent) showNotification('Sync Error', 'error'); }
   };
 
   useEffect(() => {
@@ -52,22 +51,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     return () => { if (channel) supabase?.removeChannel(channel); };
   }, [doctor.id, viewMode]);
 
-  // NEW: Download Caseload as CSV
   const handleDownloadCSV = () => {
-    const headers = "Name,Owner,Phone,Status,Last Stage,Access Code,Check-in Date\n";
+    const headers = "Name,Owner,Phone,Status,Stage,Code,Created\n";
     const rows = patients.map(p => `"${p.name}","${p.owner}","${p.owner_phone || ''}","${p.status}","${p.stage}","${p.access_code}","${p.created_at}"`).join("\n");
     const blob = new Blob([headers + rows], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.setAttribute('href', url);
-    a.setAttribute('download', `caseload_${viewMode}_${new Date().toISOString().split('T')[0]}.csv`);
+    a.href = url;
+    a.download = `vettrack_${viewMode}_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
-    showNotification("CSV Download started");
-  };
-
-  const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
-    setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 5000);
   };
 
   const handleCopyInvite = (patient: Patient) => {
@@ -75,8 +67,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     const message = `Hello from PetTracker! Follow ${patient.name}'s status live here: \n\n${link}\n\nPatient ID: ${patient.id}\nAccess Code: ${patient.access_code}\n\nQuestions? Please contact PetTracker.io.`;
     navigator.clipboard.writeText(message);
     setCopiedId(patient.id);
-    showNotification("Invite copied");
     setTimeout(() => setCopiedId(null), 3000);
+    showNotification("Invite copied");
   };
 
   const handleDischargeConfirm = async () => {
@@ -90,12 +82,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     } catch (error) { showNotification('Discharge failed', 'error'); }
   };
 
-  const handleStatusUpdate = async (id: string, newStage: StageId) => {
-    try {
-      await api.updateStage(id, newStage, doctor.id, noteDrafts[id]);
-      showNotification('Status updated');
-      loadData({ silent: true });
-    } catch (error) { showNotification('Update failed', 'error'); }
+  const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ msg, type });
+    setTimeout(() => setNotification(null), 5000);
   };
 
   const CopyableInfo = ({ label, value, fieldKey }: { label: string, value: string, fieldKey: string }) => {
@@ -113,7 +102,26 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
   return (
     <div className="max-w-7xl mx-auto pb-20 p-4">
-      {/* Branded Discharge Modal Omitted for Brevity */}
+      {dischargeTarget && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-8 text-center">
+              <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-500">
+                <AlertTriangle size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Confirm Discharge</h3>
+              <p className="text-sm text-slate-500 leading-relaxed">
+                Are you sure you want to discharge <span className="font-bold text-slate-900">{dischargeTarget.name}</span>?
+              </p>
+            </div>
+            <div className="flex border-t border-slate-100">
+              <button onClick={() => setDischargeTarget(null)} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 transition-colors border-r border-slate-100">Cancel</button>
+              <button onClick={handleDischargeConfirm} className="flex-1 px-6 py-4 text-sm font-bold text-orange-600 hover:bg-orange-50 transition-colors">Discharge</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {notification && (
         <div className={`fixed top-4 right-4 px-6 py-4 rounded-lg shadow-xl z-50 text-white font-medium ${notification.type === 'success' ? 'bg-indigo-600' : 'bg-red-600'}`}>{notification.msg}</div>
       )}
@@ -125,18 +133,31 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         </div>
         <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg font-medium hover:bg-slate-200 transition-colors border border-slate-100"><LogOut size={18} /> Logout</button>
       </div>
-      
-      {/* INTEGRATED TAB BAR & CSV BUTTON */}
-      <div className="bg-white rounded-t-2xl border border-slate-100 p-2 flex justify-between items-center shadow-sm">
-        <div className="flex gap-2">
-          <button onClick={() => setViewMode('active')} className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${viewMode === 'active' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}>Active Caseload</button>
-          <button onClick={() => setViewMode('discharged')} className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${viewMode === 'discharged' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}>Discharge History</button>
-        </div>
-        <button onClick={handleDownloadCSV} className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-sm font-bold transition-all border border-emerald-100"><FileDown size={18}/> Download CSV</button>
-      </div>
 
-      <div className="bg-white rounded-b-2xl shadow-sm border border-slate-100 p-6 mb-8 border-t-0">
-        {/* Check-in Form Omitted for Brevity */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-8">
+        <div className="bg-slate-50 px-6 py-3 border-b border-slate-100 flex justify-between items-center">
+          <div className="flex gap-2">
+            <button onClick={() => setViewMode('active')} className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${viewMode === 'active' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:bg-white'}`}>Active Caseload</button>
+            <button onClick={() => setViewMode('discharged')} className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${viewMode === 'discharged' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:bg-white'}`}>Discharged History</button>
+          </div>
+          <button onClick={handleDownloadCSV} className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-emerald-50 text-emerald-600 rounded-xl text-xs font-black uppercase tracking-widest border border-slate-100 transition-all"><FileDown size={16}/> Download CSV</button>
+        </div>
+        
+        <div className="p-6 border-b border-slate-100">
+          <h2 className="text-sm font-bold mb-4 uppercase tracking-widest text-slate-400">Check In New Patient</h2>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            const id = Math.random().toString(36).substring(2, 14);
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            const { error } = await supabase.from('patients').insert([{ ...newPatient, id, clinic_id: ACTIVE_CLINIC_ID, doctor_id: doctor.id, stage: 'checked-in', status: 'active', access_code: code, stage_history: [] }]);
+            if (!error) { setNewPatient({ name: '', owner: '', owner_phone: '' }); loadData(); showNotification("Checked in!"); }
+          }} className="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div className="md:col-span-3"><input type="text" value={newPatient.name} onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Pet Name" /></div>
+            <div className="md:col-span-3"><input type="text" value={newPatient.owner} onChange={(e) => setNewPatient({ ...newPatient, owner: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Owner Name" /></div>
+            <div className="md:col-span-3"><input type="tel" value={newPatient.owner_phone} onChange={(e) => setNewPatient({ ...newPatient, owner_phone: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="+1 (704) 555-0123" /></div>
+            <div className="md:col-span-3"><button type="submit" className="w-full bg-indigo-600 text-white font-bold py-2 rounded-lg transition-all">Check In</button></div>
+          </form>
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -151,14 +172,17 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                 <div className="flex gap-2">
                   <a href={`/?id=${patient.id}&code=${patient.access_code}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100"><Eye size={16}/> Preview</a>
                   <button onClick={() => handleCopyInvite(patient)} className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100">{copiedId === patient.id ? <Check size={16} className="text-emerald-500"/> : <Copy size={16}/>} Invite</button>
-                  {viewMode === 'active' && <button onClick={() => { /* Send SMS */ }} className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100"><Send size={16}/> SMS Update</button>}
+                  {viewMode === 'active' && <button onClick={() => { /* Send SMS */ }} className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100"><Send size={16}/> Update</button>}
                   <button onClick={() => setAdvancedOpen(prev => ({ ...prev, [patient.id]: !prev[patient.id] }))} className="flex items-center gap-1 px-4 py-2 bg-slate-100 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200">Advanced {advancedOpen[patient.id] ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</button>
                 </div>
               </div>
               
               {advancedOpen[patient.id] && (
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 animate-in slide-in-from-top-2">
-                  {/* Note Section Omitted for Brevity */}
+                  <div className="mb-4">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Internal Staff Note</label>
+                    <textarea onBlur={(e) => api.updateStage(patient.id, patient.stage, doctor.id, e.target.value)} defaultValue={patient.note || ''} className="w-full p-3 text-sm border rounded-lg h-20 outline-none focus:ring-2 focus:ring-indigo-50 bg-white" placeholder="Clinical commentary..." />
+                  </div>
                   <div className="flex flex-wrap justify-between items-end pt-4 border-t gap-y-4">
                     <div className="flex flex-wrap items-center gap-x-10 gap-y-4">
                       <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline"><History size={14}/> View Logs</button>
@@ -167,11 +191,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                     </div>
                     {viewMode === 'active' && <button onClick={() => setDischargeTarget(patient)} className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:bg-orange-50 bg-white px-4 py-2 rounded-xl border border-orange-100 shadow-sm transition-all"><Archive size={14} /> Discharge</button>}
                   </div>
-                  {/* FIX: SCROLLING HISTORY LIST */}
                   {historyOpen[patient.id] && (
                     <div className="mt-4 border-t pt-4 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
                       {patient.stage_history?.map((event, i) => (
-                        <div key={i} className="text-xs text-slate-500 border-l-2 border-indigo-200 pl-3 ml-1 mb-2 last:mb-0">
+                        <div key={i} className="text-xs text-slate-500 border-l-2 border-indigo-200 pl-3 ml-1 mb-2">
                           Moved to <span className="font-bold">{STAGES.find(s => s.id === event.to_stage)?.label}</span> at {new Date(event.changed_at).toLocaleTimeString()}
                         </div>
                       ))}
@@ -183,17 +206,16 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
               <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
                 {STAGES.map((stage) => {
                   const isActive = patient.stage === stage.id;
-                  // If discharged history, we only highlight if it was the last known stage, or hide highlights
                   return (
-                    <button key={stage.id} onClick={() => handleStatusUpdate(patient.id, stage.id)} disabled={viewMode === 'discharged'} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${isActive && viewMode === 'active' ? `${stage.color} border-transparent text-white shadow-lg` : 'bg-white border-slate-100 text-slate-500'} ${viewMode === 'discharged' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-50'}`}>
+                    <button key={stage.id} onClick={() => { if(viewMode === 'active') api.updateStage(patient.id, stage.id as StageId, doctor.id) }} disabled={viewMode === 'discharged'} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${isActive && viewMode === 'active' ? `${stage.color} border-transparent text-white shadow-lg` : 'bg-white border-slate-100 text-slate-500'} ${viewMode === 'discharged' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-50'}`}>
                       <stage.icon size={20} className="mb-1" />
-                      <span className="text-xs font-bold leading-tight">{stage.label}</span>
+                      <span className="text-[10px] font-black uppercase tracking-tighter leading-tight">{stage.label}</span>
                     </button>
                   );
                 })}
               </div>
               {viewMode === 'discharged' && (
-                <div className="mt-4 p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center justify-center gap-2 text-emerald-700 text-xs font-bold uppercase tracking-wider">
+                <div className="mt-4 p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center justify-center gap-2 text-emerald-700 text-[10px] font-black uppercase tracking-widest">
                   <CheckCircle size={16}/> Final Status: Patient Discharged
                 </div>
               )}
