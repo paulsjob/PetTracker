@@ -5,7 +5,7 @@ import { Patient, Doctor, StageId } from '../types';
 import { STAGES } from '../constants';
 import { 
   Plus, LogOut, Dog, Stethoscope, 
-  History, ChevronDown, ChevronUp, Send, Loader2, User, Eye, Archive, Copy, Check
+  History, ChevronDown, ChevronUp, Send, Loader2, User, Eye, Archive, Copy, Check, X, AlertTriangle
 } from 'lucide-react';
 
 const ACTIVE_CLINIC_ID = 'local-demo-clinic';
@@ -21,6 +21,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const [loading, setLoading] = useState(true);
   const [sendingSms, setSendingSms] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null); // For individual fields
+  const [dischargeTarget, setDischargeTarget] = useState<Patient | null>(null);
+  
   const [newPatient, setNewPatient] = useState({ name: '', owner: '', owner_phone: '' });
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
@@ -62,12 +65,19 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
   const handleCopyInvite = (patient: Patient) => {
     const link = `${window.location.origin}/?id=${patient.id}&code=${patient.access_code}`;
-    const message = `Hello! Follow ${patient.name}'s status live here: ${link}\n\nPatient ID: ${patient.id}\nAccess Code: ${patient.access_code}`;
+    // Updated professional format
+    const message = `Hello from PetTracker! Follow ${patient.name}'s status live here: \n\n${link}\n\nPatient ID: ${patient.id}\nAccess Code: ${patient.access_code}\n\nQuestions? Please contact PetTracker.io.`;
     
     navigator.clipboard.writeText(message);
     setCopiedId(patient.id);
     showNotification("Invite copied to clipboard");
     setTimeout(() => setCopiedId(null), 3000);
+  };
+
+  const handleIndividualCopy = (text: string, fieldKey: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldKey);
+    setTimeout(() => setCopiedField(null), 2000);
   };
 
   const handleAddPatient = async (e: React.FormEvent) => {
@@ -89,15 +99,16 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     } catch (error: any) { showNotification(`Failed: ${error.message}`, 'error'); }
   };
 
-  const handleDischarge = async (id: string) => {
-    if (!window.confirm("Are you sure? This will remove the patient from your active dashboard.")) return;
+  const handleDischargeConfirm = async () => {
+    if (!dischargeTarget) return;
     try {
       const { error } = await supabase
         .from('patients')
         .update({ status: 'discharged', updated_at: new Date().toISOString() })
-        .eq('id', id);
+        .eq('id', dischargeTarget.id);
       if (error) throw error;
       showNotification('Patient discharged successfully');
+      setDischargeTarget(null);
       loadData();
     } catch (error) { showNotification('Discharge failed', 'error'); }
   };
@@ -131,13 +142,62 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
   const filteredPatients = patients.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.owner.toLowerCase().includes(searchQuery.toLowerCase()));
 
+  // Sub-component for Copiable Fields
+  const CopyableInfo = ({ label, value, fieldKey }: { label: string, value: string, fieldKey: string }) => {
+    const isCopied = copiedField === fieldKey;
+    return (
+      <div className="flex flex-col">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">{label}</span>
+        <button 
+          onClick={() => handleIndividualCopy(value, fieldKey)}
+          className="flex items-center gap-2 group text-sm font-bold text-slate-700 hover:text-indigo-600 transition-colors"
+        >
+          <span className="font-mono">{value}</span>
+          {isCopied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} className="text-slate-300 group-hover:text-indigo-400 transition-colors" />}
+        </button>
+      </div>
+    );
+  };
+
   return (
-    <div className="max-w-7xl mx-auto pb-20 p-4">
+    <div className="max-w-7xl mx-auto pb-20 p-4 relative">
+      {/* BRANDED DISCHARGE MODAL */}
+      {dischargeTarget && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-8 text-center">
+              <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-500">
+                <AlertTriangle size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Confirm Discharge</h3>
+              <p className="text-sm text-slate-500 leading-relaxed">
+                Are you sure you want to discharge <span className="font-bold text-slate-900">{dischargeTarget.name}</span>? This will remove them from your active caseload.
+              </p>
+            </div>
+            <div className="flex border-t border-slate-100">
+              <button 
+                onClick={() => setDischargeTarget(null)}
+                className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 transition-colors border-r border-slate-100"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleDischargeConfirm}
+                className="flex-1 px-6 py-4 text-sm font-bold text-orange-600 hover:bg-orange-50 transition-colors"
+              >
+                Discharge
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {notification && (
         <div className={`fixed top-4 right-4 px-6 py-4 rounded-lg shadow-xl z-50 text-white font-medium ${notification.type === 'success' ? 'bg-indigo-600' : 'bg-red-600'}`}>
           {notification.msg}
         </div>
       )}
+      
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Stethoscope className="text-indigo-600"/> {doctor.name}</h1>
@@ -158,7 +218,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             <input type="text" value={newPatient.owner} onChange={(e) => setNewPatient({ ...newPatient, owner: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g. John Smith" />
           </div>
           <div className="md:col-span-3">
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Owner Phone</label>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 flex justify-between">
+              Owner Phone <span className="text-[9px] text-slate-400">+1 (XXX) XXX-XXXX</span>
+            </label>
             <input type="tel" value={newPatient.owner_phone} onChange={(e) => setNewPatient({ ...newPatient, owner_phone: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="+1 (704) 555-0123" />
           </div>
           <div className="md:col-span-3 flex items-end">
@@ -168,7 +230,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       </div>
 
       <div className="space-y-4">
-        {filteredPatients.length === 0 ? (
+        {patients.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">
             <Dog size={48} className="mx-auto mb-4 opacity-20" />
             <p className="font-medium">No active patients for {doctor.name}.</p>
@@ -218,18 +280,16 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                         ))}
                     </div>
                   </div>
-                  <div className="flex flex-wrap justify-between items-center pt-3 border-t gap-y-2">
-                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                      <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline"><History size={14}/> View History</button>
-                      <div className="text-[11px] font-bold text-slate-400 flex items-center gap-4 uppercase tracking-tighter">
-                        <span>Patient ID: <span className="text-slate-600 font-mono">{patient.id}</span></span>
-                        <span>Phone: <span className="text-slate-600 font-mono">{patient.owner_phone || 'None'}</span></span>
-                        <span>Access Code: <span className="text-slate-600 font-mono">{patient.access_code}</span></span>
-                      </div>
+                  <div className="flex flex-wrap justify-between items-end pt-4 border-t gap-y-4">
+                    <div className="flex flex-wrap items-center gap-x-10 gap-y-4">
+                      <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline self-center"><History size={14}/> View History</button>
+                      <CopyableInfo label="Patient ID" value={patient.id} fieldKey={`${patient.id}-id`} />
+                      <CopyableInfo label="Owner Phone" value={patient.owner_phone || 'None Set'} fieldKey={`${patient.id}-phone`} />
+                      <CopyableInfo label="Access Code" value={patient.access_code} fieldKey={`${patient.id}-code`} />
                     </div>
                     <button 
-                      onClick={() => handleDischarge(patient.id)}
-                      className="flex items-center gap-1 text-xs font-bold text-orange-600 hover:text-orange-700 bg-white px-3 py-1.5 rounded border border-orange-100 shadow-sm"
+                      onClick={() => setDischargeTarget(patient)}
+                      className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 bg-white px-4 py-2 rounded-xl border border-orange-100 shadow-sm active:scale-95 transition-all"
                     >
                       <Archive size={14} /> Discharge Patient
                     </button>
