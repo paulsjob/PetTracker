@@ -11,7 +11,7 @@ export interface Patient {
   id: string;
   name: string;
   owner: string;
-  owner_phone?: string | null; // This tells the app the phone number is now allowed
+  owner_phone?: string | null;
   stage: StageId;
   status: 'active' | 'discharged';
   clinic_id: string;
@@ -30,6 +30,10 @@ export interface Doctor {
   specialty: string;
   pin: string;
   clinic_id?: string;
+  // NEW FIELDS TO FIX BUILD ERRORS
+  is_admin: boolean;
+  is_active: boolean;
+  email?: string | null;
 }
 
 export type ViewState = 'landing' | 'staff-login' | 'patient-login' | 'staff-dashboard' | 'client-tracker';
