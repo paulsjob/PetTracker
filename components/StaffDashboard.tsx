@@ -5,7 +5,7 @@ import { Patient, Doctor, StageId } from '../types';
 import { STAGES } from '../constants';
 import { 
   Plus, LogOut, Dog, Stethoscope, 
-  History, ChevronDown, ChevronUp, Send, Loader2, User, Eye, Archive, Copy, Check, X, AlertTriangle
+  History, ChevronDown, ChevronUp, Send, Loader2, User, Eye, Archive, Copy, Check, AlertTriangle
 } from 'lucide-react';
 
 const ACTIVE_CLINIC_ID = 'local-demo-clinic';
@@ -19,6 +19,7 @@ interface StaffDashboardProps {
 export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor }) => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'active' | 'discharged'>('active');
   const [sendingSms, setSendingSms] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -34,11 +35,12 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const loadData = async (options?: { silent?: boolean }) => {
     try {
       if (!supabase) return;
+      // FETCH FILTER: Use viewMode ('active' or 'discharged')
       const { data, error } = await supabase
         .from('patients')
         .select('*')
         .eq('clinic_id', ACTIVE_CLINIC_ID)
-        .eq('status', 'active')
+        .eq('status', viewMode)
         .order('updated_at', { ascending: false });
       
       if (error) throw error;
@@ -56,7 +58,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     const channel = supabase?.channel('patients-live').on('postgres_changes', 
       { event: '*', schema: 'public', table: 'patients' }, () => loadData({ silent: true })).subscribe();
     return () => { if (channel) supabase?.removeChannel(channel); };
-  }, [doctor.id]);
+  }, [doctor.id, viewMode]);
 
   const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
     setNotification({ msg, type });
@@ -95,6 +97,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       if (error) throw error;
       setNewPatient({ name: '', owner: '', owner_phone: '' });
       showNotification('Patient checked in successfully');
+      if (viewMode === 'active') loadData();
     } catch (error: any) { showNotification(`Failed: ${error.message}`, 'error'); }
   };
 
@@ -190,7 +193,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Stethoscope className="text-indigo-600"/> {doctor.name}</h1>
           <p className="text-indigo-600 font-medium">{doctor.specialty}</p>
         </div>
-        <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200 transition-colors border border-slate-100"><LogOut size={18} /> Logout</button>
+        <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg font-medium hover:bg-slate-200 transition-colors border border-slate-100"><LogOut size={18} /> Logout</button>
       </div>
       
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-8">
@@ -216,11 +219,27 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         </form>
       </div>
 
+      {/* VIEW TOGGLE BUTTONS */}
+      <div className="flex gap-4 mb-6">
+        <button 
+          onClick={() => setViewMode('active')}
+          className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${viewMode === 'active' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-white text-slate-400 border border-slate-100 hover:bg-slate-50'}`}
+        >
+          Active Patients
+        </button>
+        <button 
+          onClick={() => setViewMode('discharged')}
+          className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${viewMode === 'discharged' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-white text-slate-400 border border-slate-100 hover:bg-slate-50'}`}
+        >
+          Discharged History
+        </button>
+      </div>
+
       <div className="space-y-4">
         {patients.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">
             <Dog size={48} className="mx-auto mb-4 opacity-20" />
-            <p className="font-medium">No active patients for {doctor.name}.</p>
+            <p className="font-medium">No {viewMode} patients found for {doctor.name}.</p>
           </div>
         ) : filteredPatients.map(patient => (
           <div key={patient.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -230,14 +249,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                   <h3 className="text-xl font-bold text-gray-900">{patient.name}</h3>
                   <p className="text-sm text-gray-500 flex items-center gap-1"><User size={14}/> Owner: {patient.owner}</p>
                 </div>
-                {/* STANDARDIZED ACTION ROW */}
+                {/* UPDATED ACTION ROW ORDER */}
                 <div className="flex gap-2">
-                  <button 
-                    onClick={() => handleCopyInvite(patient)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100"
-                  >
-                    {copiedId === patient.id ? <Check size={16} className="text-emerald-500"/> : <Copy size={16}/>} Copy Invite
-                  </button>
                   <a 
                     href={`/?id=${patient.id}&code=${patient.access_code}`} 
                     target="_blank" 
@@ -246,6 +259,12 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                   >
                     <Eye size={16}/> Preview
                   </a>
+                  <button 
+                    onClick={() => handleCopyInvite(patient)}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100"
+                  >
+                    {copiedId === patient.id ? <Check size={16} className="text-emerald-500"/> : <Copy size={16}/>} Copy Invite
+                  </button>
                   <button 
                     onClick={() => handleSendSMS(patient)} 
                     disabled={sendingSms[patient.id]} 
@@ -280,7 +299,11 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                       <CopyableInfo label="Owner Phone" value={patient.owner_phone || 'None Set'} fieldKey={`${patient.id}-phone`} />
                       <CopyableInfo label="Access Code" value={patient.access_code} fieldKey={`${patient.id}-code`} />
                     </div>
-                    <button onClick={() => setDischargeTarget(patient)} className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:bg-orange-50 bg-white px-4 py-2 rounded-xl border border-orange-100 shadow-sm active:scale-95 transition-all"><Archive size={14} /> Discharge Patient</button>
+                    {viewMode === 'active' && (
+                      <button onClick={() => setDischargeTarget(patient)} className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:bg-orange-50 bg-white px-4 py-2 rounded-xl border border-orange-100 shadow-sm active:scale-95 transition-all">
+                        <Archive size={14} /> Discharge Patient
+                      </button>
+                    )}
                   </div>
                   {historyOpen[patient.id] && (
                     <div className="mt-4 space-y-2 border-t pt-4">
@@ -296,7 +319,12 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
               <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
                 {STAGES.map((stage) => (
-                  <button key={stage.id} onClick={() => handleStatusUpdate(patient.id, stage.id)} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${patient.stage === stage.id ? `${stage.color} border-transparent text-white shadow-lg scale-105` : 'bg-white border-slate-100 text-slate-500 hover:bg-slate-50'}`}>
+                  <button 
+                    key={stage.id} 
+                    onClick={() => handleStatusUpdate(patient.id, stage.id)} 
+                    disabled={viewMode === 'discharged'}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${patient.stage === stage.id ? `${stage.color} border-transparent text-white shadow-lg scale-105` : 'bg-white border-slate-100 text-slate-500 hover:bg-slate-50'} ${viewMode === 'discharged' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
                     <stage.icon size={20} className="mb-1" />
                     <span className="text-xs font-bold leading-tight">{stage.label}</span>
                   </button>
