@@ -6,10 +6,11 @@ import { STAGES } from '../constants';
 import { 
   Plus, LogOut, Dog, Stethoscope, History, ChevronDown, ChevronUp, 
   Send, Loader2, User, Eye, Archive, Copy, Check, AlertTriangle, 
-  FileDown, CheckCircle, ShieldCheck, Users, UserPlus, UserMinus, Trash2, X
+  FileDown, CheckCircle, ShieldCheck, Users, UserPlus, UserMinus, Trash2, X, PlusCircle
 } from 'lucide-react';
 
 const ACTIVE_CLINIC_ID = 'local-demo-clinic';
+const QUICK_NOTES = ["Doing well", "Vitals stable", "In progress", "Waking up", "Ready soon", "Call pending"];
 
 interface StaffDashboardProps {
   onLogout: () => void;
@@ -24,18 +25,18 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const [isAdminPortal, setIsAdminPortal] = useState(false);
   const [adminDoctorFilter, setAdminDoctorFilter] = useState<string>('all');
   
-  // SPECIALTY MANAGEMENT
+  // SPECIALTY & STAFF MANAGEMENT
   const [specialties, setSpecialties] = useState<string[]>([
     "Internal Medicine", "Surgery", "Oncology", "Neurology", 
     "ER & Critical Care", "Cardiology", "Dermatology"
   ]);
   const [customSpecialty, setCustomSpecialty] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Doctor | null>(null);
 
   // INTERACTION STATE
   const [sendingSms, setSendingSms] = useState<Record<string, boolean>>({});
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [dischargeTarget, setDischargeTarget] = useState<Patient | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Doctor | null>(null);
   const [newPatient, setNewPatient] = useState({ name: '', owner: '', owner_phone: '' });
   const [newStaff, setNewStaff] = useState({ name: '', specialty: 'Internal Medicine', pin: '' });
   
@@ -69,7 +70,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     setTimeout(() => setNotification(null), 5000);
   };
 
-  // FIX: RESTORED handleSendSMS to fix build error TS2304
   const handleSendSMS = async (patient: Patient) => {
     const phone = patient.owner_phone;
     if (!phone) { showNotification("No phone number saved", "error"); return; }
@@ -128,31 +128,30 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
   return (
     <div className="max-w-7xl mx-auto pb-20 p-4 relative font-sans bg-slate-50 min-h-screen">
-      {/* DELETE USER MODAL */}
+      {/* 1. MODALS (Delete & Discharge) */}
       {deleteTarget && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95">
             <div className="p-8 text-center">
               <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500"><Trash2 size={32} /></div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Delete User?</h3>
-              <p className="text-sm text-slate-500">Are you sure you want to permanently delete <span className="font-bold text-slate-900">{deleteTarget.name}</span>? This cannot be undone.</p>
+              <p className="text-sm text-slate-500">Permanently delete <span className="font-bold text-slate-900">{deleteTarget.name}</span>? This cannot be undone.</p>
             </div>
             <div className="flex border-t border-slate-100">
-              <button onClick={() => setDeleteTarget(null)} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 transition-colors border-r border-slate-100">Cancel</button>
-              <button onClick={handleDeleteStaff} className="flex-1 px-6 py-4 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors">Delete Forever</button>
+              <button onClick={() => setDeleteTarget(null)} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 border-r border-slate-100">Cancel</button>
+              <button onClick={handleDeleteStaff} className="flex-1 px-6 py-4 text-sm font-bold text-red-600 hover:bg-red-50">Delete Forever</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* DISCHARGE MODAL */}
       {dischargeTarget && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95">
             <div className="p-8 text-center">
               <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-500"><AlertTriangle size={32} /></div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Confirm Discharge</h3>
-              <p className="text-sm text-slate-500 leading-relaxed">Archive <span className="font-bold text-slate-900">{dischargeTarget.name}</span>'s active record?</p>
+              <p className="text-sm text-slate-500 leading-relaxed">Archive <span className="font-bold text-slate-900">{dischargeTarget.name}</span>'s record?</p>
             </div>
             <div className="flex border-t border-slate-100">
               <button onClick={() => setDischargeTarget(null)} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 border-r border-slate-100">Cancel</button>
@@ -169,7 +168,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         <div className={`fixed top-4 right-4 px-6 py-4 rounded-lg shadow-xl z-50 text-white font-medium ${notification.type === 'success' ? 'bg-indigo-600' : 'bg-red-600'}`}>{notification.msg}</div>
       )}
       
-      {/* HEADER */}
+      {/* 2. HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-4">
           <div className={`p-3 rounded-xl text-white shadow-lg ${isAdminPortal ? 'bg-amber-500' : 'bg-indigo-600'}`}>
@@ -177,7 +176,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{isAdminPortal ? 'Clinic Admin' : doctor.name}</h1>
-            <p className="text-indigo-600 font-medium text-sm">{isAdminPortal ? 'Operations Control' : doctor.specialty}</p>
+            <p className="text-indigo-600 font-medium text-sm">{isAdminPortal ? 'Operations Portal' : doctor.specialty}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -190,11 +189,11 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         </div>
       </div>
 
-      {/* ADMIN TOOLS */}
+      {/* 3. ADMIN TOOLS */}
       {isAdminPortal && (
         <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in slide-in-from-top-4">
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-            <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2"><UserPlus size={18}/> Add Provider</h2>
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+            <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2"><UserPlus size={18}/> Onboard Provider</h2>
             <form onSubmit={async (e) => {
                e.preventDefault();
                const id = `doc-${Math.random().toString(36).substring(2, 8)}`;
@@ -208,35 +207,31 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
               <input type="text" maxLength={4} value={newStaff.pin} onChange={(e) => setNewStaff({...newStaff, pin: e.target.value.replace(/\D/g,'')})} placeholder="Set PIN" className="w-full px-5 py-3 bg-slate-50 border-none rounded-2xl text-sm font-bold tracking-widest outline-none" />
               <button type="submit" className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl shadow-lg transition-all">Onboard Provider</button>
             </form>
-            
-            {/* SPECIALTY MANAGER */}
             <div className="mt-8 pt-6 border-t border-slate-50">
                <label className="text-[10px] font-black uppercase text-slate-400 mb-3 block px-1">Manage Specialties</label>
                <div className="flex flex-wrap gap-2 mb-4">
                   {specialties.map(s => (
                     <div key={s} className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 rounded-full text-[10px] font-bold text-slate-600 border border-slate-200">
-                      {s}
-                      <button onClick={() => removeSpecialty(s)} className="p-0.5 hover:text-red-500 transition-colors"><X size={12}/></button>
+                      {s} <button onClick={() => removeSpecialty(s)} className="p-0.5 hover:text-red-500"><X size={12}/></button>
                     </div>
                   ))}
                </div>
                <div className="flex gap-2">
                   <input type="text" value={customSpecialty} onChange={(e) => setCustomSpecialty(e.target.value)} placeholder="New specialty..." className="flex-1 px-4 py-2 bg-slate-50 rounded-xl text-xs outline-none border border-slate-100" />
-                  <button onClick={handleAddSpecialty} className="p-2.5 bg-white text-indigo-600 border border-indigo-100 rounded-xl hover:bg-indigo-50"><Plus size={18}/></button>
+                  <button onClick={handleAddSpecialty} className="p-2.5 bg-white text-indigo-600 border border-indigo-100 rounded-xl hover:bg-indigo-50"><PlusCircle size={20}/></button>
                </div>
             </div>
           </div>
-          
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col overflow-hidden">
-             <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2"><Users size={18}/> Clinical Staff Directory</h2>
-             <div className="flex-1 overflow-y-auto max-h-[400px]">
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
+             <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2"><Users size={18}/> Staff Directory</h2>
+             <div className="flex-1 overflow-y-auto max-h-[440px]">
                <table className="w-full text-left">
                   <tbody className="divide-y divide-slate-50">
                     {allDoctors.map(doc => (
                       <tr key={doc.id} className="text-sm group">
                         <td className="py-4">
                            <div className="font-bold text-slate-700">{doc.name} {doc.is_admin && <span className="ml-2 text-[8px] text-amber-500 font-black">ADMIN</span>}</div>
-                           <div className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">{doc.specialty}</div>
+                           <div className="text-[10px] text-slate-400 font-medium uppercase">{doc.specialty}</div>
                         </td>
                         <td className="py-4 font-mono text-slate-400 font-bold">{doc.pin}</td>
                         <td className="py-4 text-right">
@@ -246,9 +241,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                                 <button onClick={() => supabase.from('doctors').update({ is_active: !doc.is_active }).eq('id', doc.id).then(() => loadData())} className={`p-2 rounded-xl transition-all ${doc.is_active ? 'text-slate-300 hover:text-amber-500' : 'text-emerald-500 bg-emerald-50'}`}>
                                   {doc.is_active ? <UserMinus size={18}/> : <CheckCircle size={18}/>}
                                 </button>
-                                <button onClick={() => setDeleteTarget(doc)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
-                                  <Trash2 size={18}/>
-                                </button>
+                                <button onClick={() => setDeleteTarget(doc)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={18}/></button>
                               </>
                             )}
                           </div>
@@ -262,7 +255,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         </div>
       )}
 
-      {/* CHECK-IN FORM */}
+      {/* 4. CHECK-IN FORM */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 mb-4">
           <h2 className="text-xs font-bold mb-4 uppercase tracking-widest text-slate-400 px-1">Check In New Patient</h2>
           <form onSubmit={async (e) => {
@@ -279,24 +272,24 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
           </form>
       </div>
 
-      {/* TIGHTENED TABS */}
+      {/* 5. TIGHTENED TABS (THE TABS YOU LOVED) */}
       <div className="mb-4 px-2 flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex gap-2 bg-slate-200/50 p-1 rounded-2xl border border-slate-100">
-          <button onClick={() => setViewMode('active')} className={`px-8 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${viewMode === 'active' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-white'}`}>Active</button>
+          <button onClick={() => setViewMode('active')} className={`px-8 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${viewMode === 'active' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-white'}`}>Active Patients</button>
           <button onClick={() => setViewMode('discharged')} className={`px-8 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${viewMode === 'discharged' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-white'}`}>Discharged</button>
         </div>
         {isAdminPortal && (
-          <div className="flex items-center gap-4 bg-white px-4 py-2 rounded-xl border border-slate-100">
+          <div className="flex items-center gap-4 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filter:</span>
             <select value={adminDoctorFilter} onChange={(e) => setAdminDoctorFilter(e.target.value)} className="bg-transparent text-sm font-bold text-indigo-600 outline-none cursor-pointer min-w-[120px]">
               <option value="all">Entire Clinic</option>
-              {allDoctors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              {allDoctors.map(d => <option key={d.id} value={d.id}>{d.name} {!d.is_active ? '(Inactive)' : ''}</option>)}
             </select>
           </div>
         )}
       </div>
 
-      {/* PATIENT LIST */}
+      {/* 6. PATIENT LIST */}
       <div className="space-y-6">
         {patients.map(patient => {
           const assignedDoc = allDoctors.find(d => d.id === patient.doctor_id);
@@ -306,7 +299,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
               <div className="p-6 lg:p-8">
                 <div className="flex flex-col lg:flex-row justify-between items-start gap-6 mb-8">
                   <div>
-                    <h3 className="text-xl font-extrabold text-slate-900 mb-1">{patient.name}</h3>
+                    <h3 className="text-xl font-extrabold text-slate-900 mb-1 group-hover:text-indigo-600 transition-colors">{patient.name}</h3>
                     <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-400">
                        <span className="flex items-center gap-2"><User size={14}/> {patient.owner}</span>
                        <span className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg">
@@ -317,22 +310,52 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                   <div className="flex flex-wrap gap-2">
                     <a href={clientLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-100 transition-all"><Eye size={16}/> Preview</a>
                     {viewMode === 'active' && <button onClick={() => handleSendSMS(patient)} disabled={sendingSms[patient.id]} className="flex items-center gap-2 px-5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-100 transition-all">{sendingSms[patient.id] ? <Loader2 className="animate-spin" size={16}/> : <Send size={16}/>} SMS Update</button>}
-                    <button onClick={() => setAdvancedOpen(prev => ({ ...prev, [patient.id]: !prev[patient.id] }))} className="flex items-center gap-2 px-5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-100 transition-all">Advanced {advancedOpen[patient.id] ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</button>
+                    <button onClick={() => setAdvancedOpen(prev => ({ ...prev, [patient.id]: !prev[patient.id] }))} className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold border border-slate-100 transition-all">Advanced {advancedOpen[patient.id] ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</button>
                   </div>
                 </div>
                 
                 {advancedOpen[patient.id] && (
                   <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 mb-8 animate-in slide-in-from-top-4">
-                    <textarea onBlur={(e) => api.updateStage(patient.id, patient.stage, doctor.id, e.target.value)} defaultValue={patient.note || ''} className="w-full p-4 bg-white border border-slate-100 rounded-xl text-sm h-20 mb-6 outline-none shadow-sm" placeholder="Internal clinical note..." />
+                    <label className="block text-[10px] font-black uppercase text-slate-400 mb-3 px-1 tracking-widest">Internal Clinical Note</label>
+                    <textarea onBlur={(e) => api.updateStage(patient.id, patient.stage, doctor.id, e.target.value)} defaultValue={patient.note || ''} className="w-full p-4 bg-white border border-slate-100 rounded-xl text-sm h-20 mb-4 outline-none shadow-sm" placeholder="Add clinical commentary..." />
+                    
+                    {/* QUICK INPUT BUTTONS RESTORED */}
+                    <div className="flex flex-wrap gap-2 mb-8">
+                        {QUICK_NOTES.map(note => (
+                            <button key={note} onClick={() => api.updateStage(patient.id, patient.stage, doctor.id, note).then(() => loadData())} className="px-3 py-1.5 bg-white border border-slate-200 rounded text-xs font-bold text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all">+ {note}</button>
+                        ))}
+                    </div>
+
                     <div className="flex flex-wrap justify-between items-center pt-6 border-t border-slate-200 gap-y-6">
                       <div className="flex flex-wrap items-center gap-x-10 gap-y-6">
-                        <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-black text-indigo-600 flex items-center gap-2 uppercase tracking-widest"><History size={16}/> Logs</button>
+                        {/* LOGS TOGGLE FIXED */}
+                        <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-black text-indigo-600 flex items-center gap-2 uppercase tracking-widest hover:opacity-70"><History size={16}/> Logs</button>
                         <CopyableInfo label="Portal Link" value={clientLink} fieldKey={`${patient.id}-link`} customDisplay="Copy Direct Link" />
                         <CopyableInfo label="ID" value={patient.id} fieldKey={`${patient.id}-id`} />
                         <CopyableInfo label="Auth Code" value={patient.access_code} fieldKey={`${patient.id}-code`} />
                       </div>
                       {viewMode === 'active' && <button onClick={() => setDischargeTarget(patient)} className="flex items-center gap-2 px-6 py-2.5 bg-white text-orange-600 border border-orange-100 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:bg-orange-50 active:scale-95 transition-all"><Archive size={16} /> Discharge</button>}
                     </div>
+
+                    {/* SCROLLING HISTORY LIST FIXED */}
+                    {historyOpen[patient.id] && (
+                      <div className="mt-8 border-t border-slate-100 pt-6 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                        <div className="space-y-4">
+                          {patient.stage_history?.map((event, i) => {
+                            const changer = allDoctors.find(d => d.id === event.changed_by_doctor_id);
+                            return (
+                              <div key={i} className="flex gap-4 items-start">
+                                <div className="w-1.5 h-1.5 rounded-full bg-indigo-200 mt-1.5 shrink-0" />
+                                <div className="text-xs text-slate-500">
+                                  <span className="font-bold text-slate-700">{STAGES.find(s => s.id === event.to_stage)?.label}</span> by {changer ? changer.name : 'Unknown'}
+                                  <span className="block text-[10px] text-slate-400 mt-0.5">{new Date(event.changed_at).toLocaleString()}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
