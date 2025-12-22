@@ -21,7 +21,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const [loading, setLoading] = useState(true);
   const [sendingSms, setSendingSms] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [copiedField, setCopiedField] = useState<string | null>(null); // For individual fields
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [dischargeTarget, setDischargeTarget] = useState<Patient | null>(null);
   
   const [newPatient, setNewPatient] = useState({ name: '', owner: '', owner_phone: '' });
@@ -65,7 +65,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
   const handleCopyInvite = (patient: Patient) => {
     const link = `${window.location.origin}/?id=${patient.id}&code=${patient.access_code}`;
-    // Updated professional format
     const message = `Hello from PetTracker! Follow ${patient.name}'s status live here: \n\n${link}\n\nPatient ID: ${patient.id}\nAccess Code: ${patient.access_code}\n\nQuestions? Please contact PetTracker.io.`;
     
     navigator.clipboard.writeText(message);
@@ -142,7 +141,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
   const filteredPatients = patients.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.owner.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  // Sub-component for Copiable Fields
   const CopyableInfo = ({ label, value, fieldKey }: { label: string, value: string, fieldKey: string }) => {
     const isCopied = copiedField === fieldKey;
     return (
@@ -161,7 +159,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
   return (
     <div className="max-w-7xl mx-auto pb-20 p-4 relative">
-      {/* BRANDED DISCHARGE MODAL */}
       {dischargeTarget && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200">
@@ -175,18 +172,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
               </p>
             </div>
             <div className="flex border-t border-slate-100">
-              <button 
-                onClick={() => setDischargeTarget(null)}
-                className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 transition-colors border-r border-slate-100"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleDischargeConfirm}
-                className="flex-1 px-6 py-4 text-sm font-bold text-orange-600 hover:bg-orange-50 transition-colors"
-              >
-                Discharge
-              </button>
+              <button onClick={() => setDischargeTarget(null)} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 transition-colors border-r border-slate-100">Cancel</button>
+              <button onClick={handleDischargeConfirm} className="flex-1 px-6 py-4 text-sm font-bold text-orange-600 hover:bg-orange-50 transition-colors">Discharge</button>
             </div>
           </div>
         </div>
@@ -203,7 +190,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Stethoscope className="text-indigo-600"/> {doctor.name}</h1>
           <p className="text-indigo-600 font-medium">{doctor.specialty}</p>
         </div>
-        <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg font-medium hover:bg-slate-200 transition-colors"><LogOut size={18} /> Logout</button>
+        <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200 transition-colors border border-slate-100"><LogOut size={18} /> Logout</button>
       </div>
       
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-8">
@@ -243,20 +230,33 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                   <h3 className="text-xl font-bold text-gray-900">{patient.name}</h3>
                   <p className="text-sm text-gray-500 flex items-center gap-1"><User size={14}/> Owner: {patient.owner}</p>
                 </div>
+                {/* STANDARDIZED ACTION ROW */}
                 <div className="flex gap-2">
                   <button 
                     onClick={() => handleCopyInvite(patient)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-sm font-bold transition-all"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100"
                   >
-                    {copiedId === patient.id ? <Check size={16}/> : <Copy size={16}/>} Copy Invite
+                    {copiedId === patient.id ? <Check size={16} className="text-emerald-500"/> : <Copy size={16}/>} Copy Invite
                   </button>
-                  <a href={`/?id=${patient.id}&code=${patient.access_code}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all">
+                  <a 
+                    href={`/?id=${patient.id}&code=${patient.access_code}`} 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100"
+                  >
                     <Eye size={16}/> Preview
                   </a>
-                  <button onClick={() => handleSendSMS(patient)} disabled={sendingSms[patient.id]} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold disabled:bg-indigo-400 transition-all">
+                  <button 
+                    onClick={() => handleSendSMS(patient)} 
+                    disabled={sendingSms[patient.id]} 
+                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100"
+                  >
                     {sendingSms[patient.id] ? <Loader2 className="animate-spin" size={16}/> : <Send size={16}/>} Send Client Update
                   </button>
-                  <button onClick={() => setAdvancedOpen(prev => ({ ...prev, [patient.id]: !prev[patient.id] }))} className="flex items-center gap-1 px-4 py-2 bg-slate-100 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200">
+                  <button 
+                    onClick={() => setAdvancedOpen(prev => ({ ...prev, [patient.id]: !prev[patient.id] }))} 
+                    className="flex items-center gap-1 px-4 py-2 bg-slate-100 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200"
+                  >
                     Advanced {advancedOpen[patient.id] ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
                   </button>
                 </div>
@@ -266,17 +266,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
                   <div className="mb-4">
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-tight">Internal Staff Note</label>
-                    <textarea 
-                      value={noteDrafts[patient.id] || patient.note || ''} 
-                      onChange={(e) => setNoteDrafts({...noteDrafts, [patient.id]: e.target.value})} 
-                      className="w-full p-3 text-sm border rounded-lg h-20 outline-none focus:ring-2 focus:ring-indigo-50 bg-white" 
-                      placeholder="Commentary..." 
-                    />
+                    <textarea value={noteDrafts[patient.id] || patient.note || ''} onChange={(e) => setNoteDrafts({...noteDrafts, [patient.id]: e.target.value})} className="w-full p-3 text-sm border rounded-lg h-20 outline-none focus:ring-2 focus:ring-indigo-50 bg-white" placeholder="Commentary..." />
                     <div className="flex flex-wrap gap-2 mt-3">
                         {QUICK_NOTES.map(note => (
-                            <button key={note} onClick={() => setNoteDrafts({...noteDrafts, [patient.id]: note})} className="px-3 py-1.5 bg-white border border-slate-200 rounded text-xs font-bold text-slate-500 hover:bg-indigo-50 transition-colors">
-                                + {note}
-                            </button>
+                            <button key={note} onClick={() => setNoteDrafts({...noteDrafts, [patient.id]: note})} className="px-3 py-1.5 bg-white border border-slate-200 rounded text-xs font-bold text-slate-500 hover:bg-indigo-50 transition-colors">+ {note}</button>
                         ))}
                     </div>
                   </div>
@@ -287,12 +280,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                       <CopyableInfo label="Owner Phone" value={patient.owner_phone || 'None Set'} fieldKey={`${patient.id}-phone`} />
                       <CopyableInfo label="Access Code" value={patient.access_code} fieldKey={`${patient.id}-code`} />
                     </div>
-                    <button 
-                      onClick={() => setDischargeTarget(patient)}
-                      className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 bg-white px-4 py-2 rounded-xl border border-orange-100 shadow-sm active:scale-95 transition-all"
-                    >
-                      <Archive size={14} /> Discharge Patient
-                    </button>
+                    <button onClick={() => setDischargeTarget(patient)} className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:bg-orange-50 bg-white px-4 py-2 rounded-xl border border-orange-100 shadow-sm active:scale-95 transition-all"><Archive size={14} /> Discharge Patient</button>
                   </div>
                   {historyOpen[patient.id] && (
                     <div className="mt-4 space-y-2 border-t pt-4">
