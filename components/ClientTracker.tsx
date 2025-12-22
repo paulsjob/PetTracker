@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Patient } from '../types';
 import { STAGES, CLINIC_CONFIG } from '../constants';
 import { api } from '../services/api';
-import { RefreshCw, ArrowLeft, Archive, CheckCircle, Phone, Calendar, MessageCircle, Mail, Clock } from 'lucide-react';
+import { RefreshCw, CheckCircle, Phone, Calendar, MessageCircle, Mail, Clock } from 'lucide-react';
 
 interface ClientTrackerProps {
   patientId: string;
@@ -37,7 +37,6 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
   if (loading && !patient) return <div className="flex flex-col items-center justify-center min-h-[50vh] text-gray-500"><RefreshCw className="w-8 h-8 animate-spin text-indigo-500" /></div>;
   if (!patient) return <div className="text-center py-12">No record found.</div>;
 
-  // LOGIC: If discharged, show final state instead of the current stage
   const isDischarged = patient.status === 'discharged';
   const currentStageIndex = STAGES.findIndex(s => s.id === patient.stage);
   const currentStageConfig = STAGES[currentStageIndex];
@@ -64,7 +63,7 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
           </h2>
           <p className="text-xl text-gray-600 max-w-lg mx-auto leading-relaxed italic">
             {isDischarged 
-              ? `${patient.name} has been discharged and is ready to head home with you! Thank you for trusting us with your pet's care.` 
+              ? `${patient.name} has been discharged and is ready to head home! Thank you for trusting us with your pet's care.` 
               : currentStageConfig?.description}
           </p>
           <div className="mt-8 text-xs text-gray-300 flex items-center justify-center gap-1">
@@ -72,7 +71,18 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
           </div>
         </div>
       </div>
-      {/* Contact details omitted for brevity */}
+
+      <div className="text-center text-gray-500 text-sm py-4">
+        <p className="mb-3">Need assistance? Contact {CLINIC_CONFIG.name}.</p>
+        <div className="flex flex-col gap-2 items-center">
+          <div className="flex items-center justify-center gap-2 font-medium text-indigo-600">
+            <Phone size={14} /> {CLINIC_CONFIG.phone}
+          </div>
+          <div className="flex items-center justify-center gap-2 text-slate-400 text-xs mt-1">
+            <Clock size={12} /> {CLINIC_CONFIG.hours}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
