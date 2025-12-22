@@ -6,7 +6,7 @@ import { STAGES } from '../constants';
 import { 
   Plus, LogOut, Dog, Stethoscope, History, ChevronDown, ChevronUp, 
   Send, Loader2, User, Eye, Archive, Copy, Check, AlertTriangle, 
-  FileDown, CheckCircle, ShieldCheck, Users, UserPlus, UserMinus
+  FileDown, CheckCircle, ShieldCheck, Users, UserPlus, UserMinus, Link
 } from 'lucide-react';
 
 const ACTIVE_CLINIC_ID = 'local-demo-clinic';
@@ -33,13 +33,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [advancedOpen, setAdvancedOpen] = useState<Record<string, boolean>>({});
-  const [searchQuery, setSearchQuery] = useState('');
 
   const loadData = async (options?: { silent?: boolean }) => {
     try {
       if (!supabase) return;
-      
-      // 1. Fetch Patients
       const { data: pData, error: pError } = await supabase
         .from('patients')
         .select('*')
@@ -48,7 +45,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         .order('updated_at', { ascending: false });
       
       if (pError) throw pError;
-
       let filtered = pData || [];
       if (!isAdminPortal) {
         filtered = filtered.filter((p: Patient) => p.doctor_id === doctor.id);
@@ -57,13 +53,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       }
       setPatients(filtered as Patient[]);
 
-      // 2. Fetch Doctors (Always fetch for filter dropdown if admin)
       if (doctor.is_admin) {
-        const { data: dData } = await supabase
-          .from('doctors')
-          .select('*')
-          .eq('clinic_id', ACTIVE_CLINIC_ID)
-          .order('name', { ascending: true });
+        const { data: dData } = await supabase.from('doctors').select('*').eq('clinic_id', ACTIVE_CLINIC_ID).order('name', { ascending: true });
         setAllDoctors((dData || []) as Doctor[]);
       }
     } catch (error) { if (!options?.silent) showNotification('Sync Error', 'error'); }
@@ -80,28 +71,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     setTimeout(() => setNotification(null), 5000);
   };
 
-  const handleAddStaff = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newStaff.name || !newStaff.pin) return;
-    try {
-      const id = `doc-${Math.random().toString(36).substring(2, 8)}`;
-      const { error } = await supabase.from('doctors').insert([{ ...newStaff, id, clinic_id: ACTIVE_CLINIC_ID, is_active: true, is_admin: false }]);
-      if (error) throw error;
-      setNewStaff({ name: '', specialty: '', pin: '' });
-      showNotification("Staff member added");
-      loadData();
-    } catch (error: any) { showNotification(error.message, "error"); }
-  };
-
-  const toggleStaffStatus = async (id: string, currentStatus: boolean) => {
-    try {
-      const { error } = await supabase.from('doctors').update({ is_active: !currentStatus }).eq('id', id);
-      if (error) throw error;
-      showNotification(`Provider updated`);
-      loadData();
-    } catch (error: any) { showNotification("Update failed", "error"); }
-  };
-
   const handleDownloadCSV = () => {
     const headers = "Name,Owner,Phone,Status,Stage,Code,Doctor_ID,Created\n";
     const rows = patients.map(p => `"${p.name}","${p.owner}","${p.owner_phone || ''}","${p.status}","${p.stage}","${p.access_code}","${p.doctor_id}","${p.created_at}"`).join("\n");
@@ -111,6 +80,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     a.href = url;
     a.download = `pettracker_export.csv`;
     a.click();
+    showNotification("CSV Exported");
   };
 
   const handleCopyInvite = (patient: Patient) => {
@@ -122,13 +92,24 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     showNotification("Invite copied");
   };
 
+  const handleDischargeConfirm = async () => {
+    if (!dischargeTarget) return;
+    try {
+      const { error } = await supabase.from('patients').update({ status: 'discharged', updated_at: new Date().toISOString() }).eq('id', dischargeTarget.id);
+      if (error) throw error;
+      setDischargeTarget(null);
+      loadData();
+      showNotification('Discharged successfully');
+    } catch (error) { showNotification('Discharge failed', 'error'); }
+  };
+
   const CopyableInfo = ({ label, value, fieldKey }: { label: string, value: string, fieldKey: string }) => {
     const isCopied = copiedField === fieldKey;
     return (
       <div className="flex flex-col">
         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-0.5">{label}</span>
         <button onClick={() => { navigator.clipboard.writeText(value); setCopiedField(fieldKey); setTimeout(() => setCopiedField(null), 2000); }} className="flex items-center gap-2 group text-sm font-bold text-slate-700 hover:text-indigo-600 transition-colors">
-          <span className="font-mono">{value}</span>
+          <span className="font-mono">{value.length > 25 ? value.slice(0, 22) + '...' : value}</span>
           {isCopied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} className="text-slate-300 group-hover:text-indigo-400" />}
         </button>
       </div>
@@ -136,8 +117,25 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   };
 
   return (
-    <div className="max-w-7xl mx-auto pb-20 p-4">
-      {/* 1. Header with Admin Portal Toggle */}
+    <div className="max-w-7xl mx-auto pb-20 p-4 relative">
+      {/* 1. Modal (Branded) */}
+      {dischargeTarget && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-8 text-center">
+              <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-500"><AlertTriangle size={32} /></div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Confirm Discharge</h3>
+              <p className="text-sm text-slate-500 leading-relaxed">Are you sure you want to discharge <span className="font-bold text-slate-900">{dischargeTarget.name}</span>?</p>
+            </div>
+            <div className="flex border-t border-slate-100">
+              <button onClick={() => setDischargeTarget(null)} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 transition-colors border-r border-slate-100 font-sans">Cancel</button>
+              <button onClick={handleDischargeConfirm} className="flex-1 px-6 py-4 text-sm font-bold text-orange-600 hover:bg-orange-50 transition-colors font-sans">Discharge</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Header Area */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-4">
           <div className={`p-3 rounded-xl text-white shadow-lg ${isAdminPortal ? 'bg-amber-500' : 'bg-indigo-600'}`}>
@@ -151,10 +149,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
         <div className="flex items-center gap-3">
           {doctor.is_admin && (
-            <button 
-              onClick={() => setIsAdminPortal(!isAdminPortal)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${isAdminPortal ? 'bg-indigo-600 text-white shadow-md' : 'bg-amber-50 text-amber-700 border border-amber-100 hover:bg-amber-100'}`}
-            >
+            <button onClick={() => setIsAdminPortal(!isAdminPortal)} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${isAdminPortal ? 'bg-indigo-600 text-white shadow-md' : 'bg-amber-50 text-amber-700 border border-amber-100 hover:bg-amber-100'}`}>
               {isAdminPortal ? <Users size={16}/> : <ShieldCheck size={16}/>}
               {isAdminPortal ? 'Exit Admin Mode' : 'Admin Portal'}
             </button>
@@ -164,22 +159,27 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         </div>
       </div>
 
-      {/* 2. Admin Staff Section (Visible when isAdminPortal is ON) */}
+      {/* 3. Admin Staff Manager (Conditional) */}
       {isAdminPortal && (
-        <div className="mb-8 grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in slide-in-from-top-4 duration-300">
+        <div className="mb-12 grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in slide-in-from-top-4 duration-300">
           <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2"><UserPlus size={18}/> Add Provider</h2>
-            <form onSubmit={handleAddStaff} className="space-y-4">
+            <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2"><UserPlus size={18}/> Onboard Staff</h2>
+            <form onSubmit={async (e) => {
+               e.preventDefault();
+               const id = `doc-${Math.random().toString(36).substring(2, 8)}`;
+               const { error } = await supabase.from('doctors').insert([{ ...newStaff, id, clinic_id: ACTIVE_CLINIC_ID, is_active: true, is_admin: false }]);
+               if (!error) { setNewStaff({ name: '', specialty: '', pin: '' }); loadData(); showNotification("Staff added"); }
+            }} className="space-y-4">
               <input type="text" value={newStaff.name} onChange={(e) => setNewStaff({...newStaff, name: e.target.value})} placeholder="Full Name" className="w-full px-4 py-2.5 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-amber-500 outline-none" />
               <input type="text" value={newStaff.specialty} onChange={(e) => setNewStaff({...newStaff, specialty: e.target.value})} placeholder="Specialty" className="w-full px-4 py-2.5 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-amber-500 outline-none" />
               <input type="text" maxLength={4} value={newStaff.pin} onChange={(e) => setNewStaff({...newStaff, pin: e.target.value.replace(/\D/g,'')})} placeholder="PIN" className="w-full px-4 py-2.5 bg-slate-50 border-none rounded-xl text-sm font-bold tracking-widest focus:ring-2 focus:ring-amber-500 outline-none" />
-              <button type="submit" className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-lg transition-all">Add Staff</button>
+              <button type="submit" className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-lg transition-all">Add Provider</button>
             </form>
           </div>
           <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
              <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2"><Users size={18}/> Staff Directory</h2>
              <table className="w-full text-left">
-                <tbody className="divide-y divide-slate-50">
+                <tbody className="divide-y divide-slate-50 font-sans">
                   {allDoctors.map(doc => (
                     <tr key={doc.id} className="text-sm">
                       <td className="py-4 px-2 font-bold text-slate-700">{doc.name} {doc.is_admin && <span className="ml-2 text-[8px] text-amber-500 font-black">ADMIN</span>}</td>
@@ -187,7 +187,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                       <td className="py-4 px-2 font-mono text-slate-400">{doc.pin}</td>
                       <td className="py-4 px-2 text-right">
                         {!doc.is_admin && (
-                          <button onClick={() => toggleStaffStatus(doc.id, doc.is_active ?? true)} className={`p-2 rounded-lg ${doc.is_active ? 'text-slate-300 hover:text-red-500' : 'text-emerald-500 bg-emerald-50'}`}>
+                          <button onClick={() => supabase.from('doctors').update({ is_active: !doc.is_active }).eq('id', doc.id).then(() => loadData())} className={`p-2 rounded-lg ${doc.is_active ? 'text-slate-300 hover:text-red-500' : 'text-emerald-500 bg-emerald-50'}`}>
                             {doc.is_active ? <UserMinus size={18}/> : <CheckCircle size={18}/>}
                           </button>
                         )}
@@ -200,8 +200,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         </div>
       )}
 
-      {/* 3. Check-In Form */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-12">
+      {/* 4. Patient Check-In Form */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-16">
           <h2 className="text-sm font-bold mb-4 uppercase tracking-widest text-slate-400">Check In New Patient</h2>
           <form onSubmit={async (e) => {
             e.preventDefault();
@@ -217,96 +217,84 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
           </form>
       </div>
 
-      {/* 4. Tab Navigation (Moved into gray space above cards) */}
-      <div className="flex justify-between items-end mb-6 px-2">
-        <div className="flex gap-2">
-          <button onClick={() => setViewMode('active')} className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${viewMode === 'active' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white/50 text-slate-400 hover:bg-white hover:text-slate-600'}`}>Active Patients</button>
-          <button onClick={() => setViewMode('discharged')} className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${viewMode === 'discharged' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white/50 text-slate-400 hover:bg-white hover:text-slate-600'}`}>Discharged</button>
+      {/* 5. TABS - Now with breathing room in the gray area */}
+      <div className="flex justify-between items-center mb-10 px-2 mt-4">
+        <div className="flex gap-4">
+          <button onClick={() => setViewMode('active')} className={`px-8 py-3 rounded-2xl text-sm font-bold transition-all shadow-sm ${viewMode === 'active' ? 'bg-indigo-600 text-white shadow-indigo-100' : 'bg-white text-slate-400 hover:bg-slate-50'}`}>Active Patients</button>
+          <button onClick={() => setViewMode('discharged')} className={`px-8 py-3 rounded-2xl text-sm font-bold transition-all shadow-sm ${viewMode === 'discharged' ? 'bg-indigo-600 text-white shadow-indigo-100' : 'bg-white text-slate-400 hover:bg-slate-50'}`}>Discharged</button>
         </div>
+        
         {isAdminPortal && (
-          <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">
+          <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-2xl border border-slate-100 shadow-sm">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Filter by Doctor:</span>
             <select value={adminDoctorFilter} onChange={(e) => setAdminDoctorFilter(e.target.value)} className="bg-transparent text-sm font-bold text-indigo-600 outline-none cursor-pointer">
               <option value="all">Entire Clinic</option>
-              {allDoctors.map(d => <option key={d.id} value={d.id}>{d.name} {!d.is_active ? '(Inactive)' : ''}</option>)}
+              {allDoctors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
         )}
       </div>
 
-      {/* 5. Patient List */}
-      <div className="space-y-6">
+      {/* 6. Patient Caseload List */}
+      <div className="space-y-8">
         {patients.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-200 text-slate-400">
             <Dog size={48} className="mx-auto mb-4 opacity-10" />
-            <p className="font-bold uppercase tracking-widest text-[10px]">No {viewMode} caseload found</p>
+            <p className="font-bold uppercase tracking-widest text-[10px]">Empty caseload</p>
           </div>
         ) : patients.map(patient => {
           const assignedDoc = allDoctors.find(d => d.id === patient.doctor_id);
+          const clientLink = `${window.location.origin}/?id=${patient.id}&code=${patient.access_code}`;
           return (
-            <div key={patient.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group transition-all hover:shadow-md">
-              <div className="p-6">
-                <div className="flex justify-between items-start mb-6">
+            <div key={patient.id} className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden group transition-all hover:shadow-md">
+              <div className="p-8">
+                <div className="flex flex-col lg:flex-row justify-between items-start gap-6 mb-8">
                   <div>
-                    <h3 className="text-xl font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">{patient.name}</h3>
-                    <div className="flex items-center gap-3 text-xs font-bold text-slate-400 mt-1">
-                       <span className="flex items-center gap-1"><User size={12}/> {patient.owner}</span>
+                    <h3 className="text-2xl font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">{patient.name}</h3>
+                    <div className="flex items-center gap-4 text-xs font-bold text-slate-400 mt-2">
+                       <span className="flex items-center gap-1.5"><User size={14}/> {patient.owner}</span>
                        <span className="text-slate-200">|</span>
-                       <span className={`flex items-center gap-1 ${assignedDoc && !assignedDoc.is_active ? 'text-red-400' : 'text-indigo-400'}`}>
-                          <ShieldCheck size={12}/> {assignedDoc ? assignedDoc.name : 'Unassigned'}
-                       </span>
+                       <span className="flex items-center gap-1.5 text-indigo-400"><ShieldCheck size={14}/> {assignedDoc ? assignedDoc.name : 'Provider Unassigned'}</span>
                     </div>
                   </div>
-                  {/* FULL ACTION ROW RESTORED */}
-                  <div className="flex gap-2">
-                    <a href={`/?id=${patient.id}&code=${patient.access_code}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-lg text-sm font-bold transition-all border border-slate-100"><Eye size={16}/> Preview</a>
-                    <button onClick={() => handleCopyInvite(patient)} className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-lg text-sm font-bold transition-all border border-slate-100">{copiedId === patient.id ? <Check size={16} className="text-emerald-500"/> : <Copy size={16}/>} Invite</button>
-                    {viewMode === 'active' && <button onClick={() => { /* SMS Logic */ }} className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-lg text-sm font-bold transition-all border border-slate-100"><Send size={16}/> Update</button>}
-                    <button onClick={() => setAdvancedOpen(prev => ({ ...prev, [patient.id]: !prev[patient.id] }))} className="flex items-center gap-1 px-4 py-2 bg-slate-100 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-all">Advanced {advancedOpen[patient.id] ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</button>
+                  <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+                    <a href={clientLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-5 py-3 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-sm font-bold transition-all border border-slate-100"><Eye size={16}/> Preview</a>
+                    <button onClick={() => handleCopyInvite(patient)} className="flex items-center gap-2 px-5 py-3 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-sm font-bold transition-all border border-slate-100">{copiedId === patient.id ? <Check size={16} className="text-emerald-500"/> : <Copy size={16}/>} Invite</button>
+                    {viewMode === 'active' && <button onClick={() => handleSendSMS(patient)} disabled={sendingSms[patient.id]} className="flex items-center gap-2 px-5 py-3 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-sm font-bold transition-all border border-slate-100">{sendingSms[patient.id] ? <Loader2 className="animate-spin" size={16}/> : <Send size={16}/>} Update</button>}
+                    <button onClick={() => setAdvancedOpen(prev => ({ ...prev, [patient.id]: !prev[patient.id] }))} className="flex items-center gap-2 px-5 py-3 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-sm font-bold transition-all border border-slate-100">Advanced {advancedOpen[patient.id] ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</button>
                   </div>
                 </div>
                 
                 {advancedOpen[patient.id] && (
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 animate-in slide-in-from-top-2 duration-300">
-                    <div className="mb-4">
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Internal Staff Note</label>
-                      <textarea onBlur={(e) => api.updateStage(patient.id, patient.stage, doctor.id, e.target.value)} defaultValue={patient.note || ''} className="w-full p-3 text-sm border rounded-lg h-20 outline-none focus:ring-2 focus:ring-indigo-50 bg-white" placeholder="Add commentary..." />
-                      <div className="flex flex-wrap gap-2 mt-3">
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 mb-8 animate-in slide-in-from-top-4 duration-300">
+                    <div className="mb-6">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 px-1">Internal Staff Note</label>
+                      <textarea onBlur={(e) => api.updateStage(patient.id, patient.stage, doctor.id, e.target.value)} defaultValue={patient.note || ''} className="w-full p-4 bg-white border border-slate-100 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-100 h-24 mb-4" placeholder="Clinical commentary..." />
+                      <div className="flex flex-wrap gap-2">
                           {QUICK_NOTES.map(note => (
-                              <button key={note} onClick={() => { /* Note Logic */ }} className="px-3 py-1.5 bg-white border border-slate-200 rounded text-xs font-bold text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all">+ {note}</button>
+                              <button key={note} onClick={() => { /* Quick Note logic */ }} className="px-4 py-2 bg-white border border-slate-100 rounded-xl text-xs font-bold text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all">+ {note}</button>
                           ))}
                       </div>
                     </div>
-                    <div className="flex flex-wrap justify-between items-end pt-4 border-t gap-y-4">
-                      <div className="flex flex-wrap items-center gap-x-10 gap-y-4">
-                        <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline"><History size={14}/> View Logs</button>
-                        <CopyableInfo label="ID" value={patient.id} fieldKey={`${patient.id}-id`} />
-                        <CopyableInfo label="Code" value={patient.access_code} fieldKey={`${patient.id}-code`} />
+                    <div className="flex flex-wrap justify-between items-center pt-6 border-t border-slate-200 gap-y-6">
+                      <div className="flex flex-wrap items-center gap-x-12 gap-y-6">
+                        <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-black uppercase tracking-widest text-indigo-600 flex items-center gap-2 hover:opacity-70"><History size={16}/> View Logs</button>
+                        <CopyableInfo label="Direct Link" value={clientLink} fieldKey={`${patient.id}-link`} />
+                        <CopyableInfo label="Patient ID" value={patient.id} fieldKey={`${patient.id}-id`} />
+                        <CopyableInfo label="Access Code" value={patient.access_code} fieldKey={`${patient.id}-code`} />
                       </div>
-                      {viewMode === 'active' && <button onClick={() => setDischargeTarget(patient)} className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:bg-orange-50 bg-white px-4 py-2 rounded-xl border border-orange-100 shadow-sm transition-all hover:text-orange-700 active:scale-95"><Archive size={14} /> Discharge</button>}
+                      {viewMode === 'active' && <button onClick={() => setDischargeTarget(patient)} className="flex items-center gap-2 px-6 py-2.5 bg-white text-orange-600 border border-orange-100 rounded-xl text-xs font-black uppercase tracking-widest shadow-sm hover:bg-orange-50 transition-all active:scale-95"><Archive size={16} /> Discharge Patient</button>}
                     </div>
-                    {historyOpen[patient.id] && (
-                      <div className="mt-4 border-t pt-4 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                        {patient.stage_history?.map((event, i) => {
-                          const docWhoChanged = allDoctors.find(d => d.id === event.changed_by_doctor_id);
-                          return (
-                            <div key={i} className="text-xs text-slate-500 border-l-2 border-indigo-200 pl-3 ml-1 mb-2 last:mb-0">
-                              <span className="font-bold">{STAGES.find(s => s.id === event.to_stage)?.label}</span> by {docWhoChanged ? docWhoChanged.name : 'System'} at {new Date(event.changed_at).toLocaleTimeString()}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
                   </div>
                 )}
 
-                <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                   {STAGES.map((stage) => {
                     const isActive = patient.stage === stage.id;
                     return (
-                      <button key={stage.id} onClick={() => { if(viewMode === 'active') api.updateStage(patient.id, stage.id as StageId, doctor.id) }} disabled={viewMode === 'discharged'} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${isActive && viewMode === 'active' ? `${stage.color} border-transparent text-white shadow-lg` : 'bg-white border-slate-100 text-slate-500 hover:text-slate-900'} ${viewMode === 'discharged' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-50'}`}>
-                        <stage.icon size={20} className="mb-1" />
-                        <span className="text-xs font-bold leading-tight">{stage.label}</span>
+                      <button key={stage.id} onClick={() => { if(viewMode === 'active') api.updateStage(patient.id, stage.id as StageId, doctor.id) }} disabled={viewMode === 'discharged'} className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${isActive && viewMode === 'active' ? `${stage.color} border-transparent text-white shadow-xl scale-[1.02]` : 'bg-white border-slate-50 text-slate-400 hover:text-slate-900 hover:bg-slate-50'} ${viewMode === 'discharged' ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                        <stage.icon size={22} className="mb-2" />
+                        <span className="text-[10px] font-black uppercase tracking-tighter leading-tight">{stage.label}</span>
                       </button>
                     );
                   })}
@@ -318,8 +306,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       </div>
 
       {notification && (
-        <div className={`fixed bottom-8 right-8 px-6 py-4 rounded-2xl shadow-2xl z-[200] text-white font-bold flex items-center gap-3 animate-in fade-in zoom-in slide-in-from-bottom-10 duration-500 ${notification.type === 'success' ? 'bg-slate-900 border-emerald-500/50' : 'bg-red-600'}`}>
-          {notification.type === 'success' && <CheckCircle className="text-emerald-400"/>}
+        <div className="fixed bottom-10 right-10 px-8 py-5 bg-slate-900 text-white rounded-3xl shadow-2xl z-[300] font-bold animate-in slide-in-from-bottom-10 flex items-center gap-3">
+          {notification.type === 'success' ? <CheckCircle className="text-emerald-400" size={20}/> : <AlertTriangle className="text-red-400" size={20}/>}
           {notification.msg}
         </div>
       )}
