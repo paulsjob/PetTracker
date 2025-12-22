@@ -89,30 +89,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     finally { setSendingSms(prev => ({ ...prev, [patient.id]: false })); }
   };
 
-  const handleAddSpecialty = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customSpecialty || specialties.includes(customSpecialty)) return;
-    setSpecialties(prev => [...prev, customSpecialty].sort());
-    setCustomSpecialty('');
-    showNotification("Specialty added");
-  };
-
-  const removeSpecialty = (name: string) => {
-    setSpecialties(prev => prev.filter(s => s !== name));
-    showNotification("Category removed");
-  };
-
-  const handleDeleteStaff = async () => {
-    if (!deleteTarget) return;
-    try {
-      const { error } = await supabase.from('doctors').delete().eq('id', deleteTarget.id);
-      if (error) throw error;
-      setDeleteTarget(null);
-      loadData();
-      showNotification("User deleted permanently");
-    } catch (err) { showNotification("Delete failed", "error"); }
-  };
-
   const CopyableInfo = ({ label, value, fieldKey, customDisplay }: { label: string, value: string, fieldKey: string, customDisplay?: string }) => {
     const isCopied = copiedField === fieldKey;
     return (
@@ -128,7 +104,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
   return (
     <div className="max-w-7xl mx-auto pb-20 p-4 relative font-sans bg-slate-50 min-h-screen">
-      {/* 1. MODALS (Delete & Discharge) */}
+      {/* DELETE USER MODAL */}
       {deleteTarget && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95">
@@ -139,12 +115,13 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             </div>
             <div className="flex border-t border-slate-100">
               <button onClick={() => setDeleteTarget(null)} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 border-r border-slate-100">Cancel</button>
-              <button onClick={handleDeleteStaff} className="flex-1 px-6 py-4 text-sm font-bold text-red-600 hover:bg-red-50">Delete Forever</button>
+              <button onClick={async () => { await supabase.from('doctors').delete().eq('id', deleteTarget.id); setDeleteTarget(null); loadData(); showNotification("User Deleted"); }} className="flex-1 px-6 py-4 text-sm font-bold text-red-600 hover:bg-red-50">Delete Forever</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* DISCHARGE MODAL */}
       {dischargeTarget && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95">
@@ -168,7 +145,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         <div className={`fixed top-4 right-4 px-6 py-4 rounded-lg shadow-xl z-50 text-white font-medium ${notification.type === 'success' ? 'bg-indigo-600' : 'bg-red-600'}`}>{notification.msg}</div>
       )}
       
-      {/* 2. HEADER */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-4">
           <div className={`p-3 rounded-xl text-white shadow-lg ${isAdminPortal ? 'bg-amber-500' : 'bg-indigo-600'}`}>
@@ -189,10 +166,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         </div>
       </div>
 
-      {/* 3. ADMIN TOOLS */}
+      {/* ADMIN TOOLS */}
       {isAdminPortal && (
         <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in slide-in-from-top-4">
-          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
             <h2 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2"><UserPlus size={18}/> Onboard Provider</h2>
             <form onSubmit={async (e) => {
                e.preventDefault();
@@ -201,10 +178,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                if (!error) { setNewStaff({ ...newStaff, name: '', pin: '' }); loadData(); showNotification("User Added"); }
             }} className="space-y-4">
               <input type="text" value={newStaff.name} onChange={(e) => setNewStaff({...newStaff, name: e.target.value})} placeholder="Provider Full Name" className="w-full px-5 py-3 bg-slate-50 border-none rounded-2xl text-sm outline-none focus:ring-2 focus:ring-amber-500" />
-              <select value={newStaff.specialty} onChange={(e) => setNewStaff({...newStaff, specialty: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 outline-none">
+              <select value={newStaff.specialty} onChange={(e) => setNewStaff({...newStaff, specialty: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border-none rounded-2xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-500">
                   {specialties.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
-              <input type="text" maxLength={4} value={newStaff.pin} onChange={(e) => setNewStaff({...newStaff, pin: e.target.value.replace(/\D/g,'')})} placeholder="Set PIN" className="w-full px-5 py-3 bg-slate-50 border-none rounded-2xl text-sm font-bold tracking-widest outline-none" />
+              <input type="text" maxLength={4} value={newStaff.pin} onChange={(e) => setNewStaff({...newStaff, pin: e.target.value.replace(/\D/g,'')})} placeholder="Set PIN" className="w-full px-5 py-3 bg-slate-50 border-none rounded-2xl text-sm font-bold tracking-widest outline-none focus:ring-2 focus:ring-amber-500" />
               <button type="submit" className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl shadow-lg transition-all">Onboard Provider</button>
             </form>
             <div className="mt-8 pt-6 border-t border-slate-50">
@@ -212,13 +189,13 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                <div className="flex flex-wrap gap-2 mb-4">
                   {specialties.map(s => (
                     <div key={s} className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 rounded-full text-[10px] font-bold text-slate-600 border border-slate-200">
-                      {s} <button onClick={() => removeSpecialty(s)} className="p-0.5 hover:text-red-500"><X size={12}/></button>
+                      {s} <button onClick={() => setSpecialties(specialties.filter(x => x !== s))} className="p-0.5 hover:text-red-500"><X size={12}/></button>
                     </div>
                   ))}
                </div>
                <div className="flex gap-2">
                   <input type="text" value={customSpecialty} onChange={(e) => setCustomSpecialty(e.target.value)} placeholder="New specialty..." className="flex-1 px-4 py-2 bg-slate-50 rounded-xl text-xs outline-none border border-slate-100" />
-                  <button onClick={handleAddSpecialty} className="p-2.5 bg-white text-indigo-600 border border-indigo-100 rounded-xl hover:bg-indigo-50"><PlusCircle size={20}/></button>
+                  <button onClick={(e) => { e.preventDefault(); if (customSpecialty) setSpecialties([...specialties, customSpecialty].sort()); setCustomSpecialty(''); }} className="p-2.5 bg-white text-indigo-600 border border-indigo-100 rounded-xl hover:bg-indigo-50"><Plus size={18}/></button>
                </div>
             </div>
           </div>
@@ -235,16 +212,14 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                         </td>
                         <td className="py-4 font-mono text-slate-400 font-bold">{doc.pin}</td>
                         <td className="py-4 text-right">
-                          <div className="flex justify-end gap-2">
-                            {!doc.is_admin && (
-                              <>
-                                <button onClick={() => supabase.from('doctors').update({ is_active: !doc.is_active }).eq('id', doc.id).then(() => loadData())} className={`p-2 rounded-xl transition-all ${doc.is_active ? 'text-slate-300 hover:text-amber-500' : 'text-emerald-500 bg-emerald-50'}`}>
-                                  {doc.is_active ? <UserMinus size={18}/> : <CheckCircle size={18}/>}
-                                </button>
-                                <button onClick={() => setDeleteTarget(doc)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={18}/></button>
-                              </>
-                            )}
-                          </div>
+                          {!doc.is_admin && (
+                            <div className="flex justify-end gap-2">
+                              <button onClick={() => supabase.from('doctors').update({ is_active: !doc.is_active }).eq('id', doc.id).then(() => loadData())} className={`p-2 rounded-xl transition-all ${doc.is_active ? 'text-slate-300 hover:text-amber-500' : 'text-emerald-500 bg-emerald-50'}`}>
+                                {doc.is_active ? <UserMinus size={18}/> : <CheckCircle size={18}/>}
+                              </button>
+                              <button onClick={() => setDeleteTarget(doc)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={18}/></button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -255,7 +230,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         </div>
       )}
 
-      {/* 4. CHECK-IN FORM */}
+      {/* CHECK-IN FORM */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 mb-4">
           <h2 className="text-xs font-bold mb-4 uppercase tracking-widest text-slate-400 px-1">Check In New Patient</h2>
           <form onSubmit={async (e) => {
@@ -267,12 +242,13 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
           }} className="grid grid-cols-1 md:grid-cols-12 gap-4">
             <div className="md:col-span-3"><input type="text" value={newPatient.name} onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })} className="w-full px-5 py-2.5 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Pet Name" /></div>
             <div className="md:col-span-3"><input type="text" value={newPatient.owner} onChange={(e) => setNewPatient({ ...newPatient, owner: e.target.value })} className="w-full px-5 py-2.5 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Owner Name" /></div>
-            <div className="md:col-span-3"><input type="tel" value={newPatient.owner_phone} onChange={(e) => setNewPatient({ ...newPatient, owner_phone: e.target.value })} className="w-full px-5 py-2.5 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="+1 (704)..." /></div>
+            {/* PHONE PLACEHOLDER FIX */}
+            <div className="md:col-span-3"><input type="tel" value={newPatient.owner_phone} onChange={(e) => setNewPatient({ ...newPatient, owner_phone: e.target.value })} className="w-full px-5 py-2.5 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="+1 (704) 555-0123" /></div>
             <div className="md:col-span-3"><button type="submit" className="w-full bg-indigo-600 text-white font-bold py-2.5 rounded-xl transition-all shadow-lg shadow-indigo-100 hover:bg-indigo-700">Check In</button></div>
           </form>
       </div>
 
-      {/* 5. TIGHTENED TABS (THE TABS YOU LOVED) */}
+      {/* NAVIGATION TABS */}
       <div className="mb-4 px-2 flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex gap-2 bg-slate-200/50 p-1 rounded-2xl border border-slate-100">
           <button onClick={() => setViewMode('active')} className={`px-8 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${viewMode === 'active' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-white'}`}>Active Patients</button>
@@ -289,7 +265,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         )}
       </div>
 
-      {/* 6. PATIENT LIST */}
+      {/* PATIENT LIST */}
       <div className="space-y-6">
         {patients.map(patient => {
           const assignedDoc = allDoctors.find(d => d.id === patient.doctor_id);
@@ -307,10 +283,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                        </span>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex gap-2">
                     <a href={clientLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-100 transition-all"><Eye size={16}/> Preview</a>
                     {viewMode === 'active' && <button onClick={() => handleSendSMS(patient)} disabled={sendingSms[patient.id]} className="flex items-center gap-2 px-5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-100 transition-all">{sendingSms[patient.id] ? <Loader2 className="animate-spin" size={16}/> : <Send size={16}/>} SMS Update</button>}
-                    <button onClick={() => setAdvancedOpen(prev => ({ ...prev, [patient.id]: !prev[patient.id] }))} className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold border border-slate-100 transition-all">Advanced {advancedOpen[patient.id] ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</button>
+                    <button onClick={() => setAdvancedOpen(prev => ({ ...prev, [patient.id]: !prev[patient.id] }))} className="flex items-center gap-2 px-5 py-2.5 bg-slate-50 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold border border-slate-100 transition-all">Advanced {advancedOpen[patient.id] ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</button>
                   </div>
                 </div>
                 
@@ -328,7 +304,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
                     <div className="flex flex-wrap justify-between items-center pt-6 border-t border-slate-200 gap-y-6">
                       <div className="flex flex-wrap items-center gap-x-10 gap-y-6">
-                        {/* LOGS TOGGLE FIXED */}
                         <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-black text-indigo-600 flex items-center gap-2 uppercase tracking-widest hover:opacity-70"><History size={16}/> Logs</button>
                         <CopyableInfo label="Portal Link" value={clientLink} fieldKey={`${patient.id}-link`} customDisplay="Copy Direct Link" />
                         <CopyableInfo label="ID" value={patient.id} fieldKey={`${patient.id}-id`} />
@@ -341,10 +316,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                     {historyOpen[patient.id] && (
                       <div className="mt-8 border-t border-slate-100 pt-6 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                         <div className="space-y-4">
-                          {patient.stage_history?.map((event, i) => {
+                          {(patient.stage_history || []).length > 0 ? patient.stage_history?.map((event, i) => {
                             const changer = allDoctors.find(d => d.id === event.changed_by_doctor_id);
                             return (
-                              <div key={i} className="flex gap-4 items-start">
+                              <div key={i} className="flex gap-4 items-start animate-in fade-in duration-300">
                                 <div className="w-1.5 h-1.5 rounded-full bg-indigo-200 mt-1.5 shrink-0" />
                                 <div className="text-xs text-slate-500">
                                   <span className="font-bold text-slate-700">{STAGES.find(s => s.id === event.to_stage)?.label}</span> by {changer ? changer.name : 'Unknown'}
@@ -352,7 +327,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                                 </div>
                               </div>
                             );
-                          })}
+                          }) : <div className="text-xs text-slate-400 italic px-2">No logs found.</div>}
                         </div>
                       </div>
                     )}
