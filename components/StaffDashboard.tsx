@@ -5,7 +5,7 @@ import { Patient, Doctor, StageId } from '../types';
 import { STAGES } from '../constants';
 import { 
   Plus, LogOut, Dog, Stethoscope, 
-  History, ChevronDown, ChevronUp, Send, Loader2, User, Eye
+  History, ChevronDown, ChevronUp, Send, Loader2, User, Eye, Archive
 } from 'lucide-react';
 
 const ACTIVE_CLINIC_ID = 'local-demo-clinic';
@@ -30,6 +30,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const loadData = async (options?: { silent?: boolean }) => {
     try {
       if (!supabase) return;
+      // Fetching only 'active' patients to keep your dashboard clean
       const { data, error } = await supabase
         .from('patients')
         .select('*')
@@ -76,6 +77,22 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       setNewPatient({ name: '', owner: '', owner_phone: '' });
       showNotification('Patient checked in successfully');
     } catch (error: any) { showNotification(`Failed: ${error.message}`, 'error'); }
+  };
+
+  const handleDischarge = async (id: string) => {
+    if (!window.confirm("Are you sure? This will remove the patient from your active dashboard.")) return;
+    try {
+      const { error } = await supabase
+        .from('patients')
+        .update({ status: 'discharged', updated_at: new Date().toISOString() })
+        .eq('id', id);
+      
+      if (error) throw error;
+      showNotification('Patient discharged successfully');
+      loadData(); // Refresh list to remove the discharged patient
+    } catch (error) {
+      showNotification('Discharge failed', 'error');
+    }
   };
 
   const handleSendSMS = async (patient: Patient) => {
@@ -190,7 +207,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t">
                     <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline"><History size={14}/> View History</button>
-                    <span className="text-xs font-mono text-slate-400">ID: {patient.id} | Access Code: {patient.access_code}</span>
+                    <div className="flex items-center gap-4">
+                        <span className="text-xs font-mono text-slate-400 uppercase tracking-tighter">Access Code: {patient.access_code}</span>
+                        <button 
+                          onClick={() => handleDischarge(patient.id)}
+                          className="flex items-center gap-1 text-xs font-bold text-orange-600 hover:text-orange-700"
+                        >
+                          <Archive size={14} /> Discharge Patient
+                        </button>
+                    </div>
                   </div>
                   {historyOpen[patient.id] && (
                     <div className="mt-4 space-y-2 border-t pt-4">
