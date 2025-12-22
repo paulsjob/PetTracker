@@ -60,6 +60,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     a.href = url;
     a.download = `vettrack_${viewMode}_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
+    showNotification("CSV Exported");
   };
 
   const handleCopyInvite = (patient: Patient) => {
@@ -106,13 +107,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-8 text-center">
-              <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-500">
-                <AlertTriangle size={32} />
-              </div>
+              <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-500"><AlertTriangle size={32} /></div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Confirm Discharge</h3>
-              <p className="text-sm text-slate-500 leading-relaxed">
-                Are you sure you want to discharge <span className="font-bold text-slate-900">{dischargeTarget.name}</span>?
-              </p>
+              <p className="text-sm text-slate-500 leading-relaxed">Are you sure you want to discharge <span className="font-bold text-slate-900">{dischargeTarget.name}</span>?</p>
             </div>
             <div className="flex border-t border-slate-100">
               <button onClick={() => setDischargeTarget(null)} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 transition-colors border-r border-slate-100">Cancel</button>
@@ -131,19 +128,20 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Stethoscope className="text-indigo-600"/> {doctor.name}</h1>
           <p className="text-indigo-600 font-medium">{doctor.specialty}</p>
         </div>
-        <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg font-medium hover:bg-slate-200 transition-colors border border-slate-100"><LogOut size={18} /> Logout</button>
+        {/* CSV ICON NEXT TO LOGOUT */}
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleDownloadCSV} 
+            title="Download CSV"
+            className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all border border-slate-100"
+          >
+            <FileDown size={20} />
+          </button>
+          <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg font-medium hover:bg-slate-200 transition-colors border border-slate-100"><LogOut size={18} /> Logout</button>
+        </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-8">
-        <div className="bg-slate-50 px-6 py-3 border-b border-slate-100 flex justify-between items-center">
-          <div className="flex gap-2">
-            <button onClick={() => setViewMode('active')} className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${viewMode === 'active' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:bg-white'}`}>Active Caseload</button>
-            <button onClick={() => setViewMode('discharged')} className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${viewMode === 'discharged' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:bg-white'}`}>Discharged History</button>
-          </div>
-          <button onClick={handleDownloadCSV} className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-emerald-50 text-emerald-600 rounded-xl text-xs font-black uppercase tracking-widest border border-slate-100 transition-all"><FileDown size={16}/> Download CSV</button>
-        </div>
-        
-        <div className="p-6 border-b border-slate-100">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-8">
           <h2 className="text-sm font-bold mb-4 uppercase tracking-widest text-slate-400">Check In New Patient</h2>
           <form onSubmit={async (e) => {
             e.preventDefault();
@@ -157,7 +155,12 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             <div className="md:col-span-3"><input type="tel" value={newPatient.owner_phone} onChange={(e) => setNewPatient({ ...newPatient, owner_phone: e.target.value })} className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="+1 (704) 555-0123" /></div>
             <div className="md:col-span-3"><button type="submit" className="w-full bg-indigo-600 text-white font-bold py-2 rounded-lg transition-all">Check In</button></div>
           </form>
-        </div>
+      </div>
+
+      {/* VIEW TOGGLES DIRECTLY ABOVE CARDS */}
+      <div className="flex gap-2 mb-4">
+        <button onClick={() => setViewMode('active')} className={`px-5 py-2 rounded-xl text-sm font-bold transition-all ${viewMode === 'active' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}>Active Patients</button>
+        <button onClick={() => setViewMode('discharged')} className={`px-5 py-2 rounded-xl text-sm font-bold transition-all ${viewMode === 'discharged' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}>Discharged</button>
       </div>
 
       <div className="space-y-4">
@@ -172,7 +175,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                 <div className="flex gap-2">
                   <a href={`/?id=${patient.id}&code=${patient.access_code}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100"><Eye size={16}/> Preview</a>
                   <button onClick={() => handleCopyInvite(patient)} className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100">{copiedId === patient.id ? <Check size={16} className="text-emerald-500"/> : <Copy size={16}/>} Invite</button>
-                  {viewMode === 'active' && <button onClick={() => { /* Send SMS */ }} className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100"><Send size={16}/> Update</button>}
+                  {viewMode === 'active' && <button onClick={() => { /* SMS Update Logic */ }} className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100"><Send size={16}/> Update</button>}
                   <button onClick={() => setAdvancedOpen(prev => ({ ...prev, [patient.id]: !prev[patient.id] }))} className="flex items-center gap-1 px-4 py-2 bg-slate-100 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200">Advanced {advancedOpen[patient.id] ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</button>
                 </div>
               </div>
@@ -182,6 +185,11 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                   <div className="mb-4">
                     <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Internal Staff Note</label>
                     <textarea onBlur={(e) => api.updateStage(patient.id, patient.stage, doctor.id, e.target.value)} defaultValue={patient.note || ''} className="w-full p-3 text-sm border rounded-lg h-20 outline-none focus:ring-2 focus:ring-indigo-50 bg-white" placeholder="Clinical commentary..." />
+                    <div className="flex flex-wrap gap-2 mt-3">
+                        {QUICK_NOTES.map(note => (
+                            <button key={note} onClick={() => { /* Quick note logic */ }} className="px-3 py-1.5 bg-white border border-slate-200 rounded text-xs font-bold text-slate-500 hover:bg-indigo-50 transition-colors">+ {note}</button>
+                        ))}
+                    </div>
                   </div>
                   <div className="flex flex-wrap justify-between items-end pt-4 border-t gap-y-4">
                     <div className="flex flex-wrap items-center gap-x-10 gap-y-4">
@@ -203,19 +211,20 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                 </div>
               )}
 
+              {/* IMPROVED LABEL READABILITY: Sentence case, better font-weight */}
               <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
                 {STAGES.map((stage) => {
                   const isActive = patient.stage === stage.id;
                   return (
                     <button key={stage.id} onClick={() => { if(viewMode === 'active') api.updateStage(patient.id, stage.id as StageId, doctor.id) }} disabled={viewMode === 'discharged'} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${isActive && viewMode === 'active' ? `${stage.color} border-transparent text-white shadow-lg` : 'bg-white border-slate-100 text-slate-500'} ${viewMode === 'discharged' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-50'}`}>
                       <stage.icon size={20} className="mb-1" />
-                      <span className="text-[10px] font-black uppercase tracking-tighter leading-tight">{stage.label}</span>
+                      <span className="text-xs font-bold leading-tight">{stage.label}</span>
                     </button>
                   );
                 })}
               </div>
               {viewMode === 'discharged' && (
-                <div className="mt-4 p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center justify-center gap-2 text-emerald-700 text-[10px] font-black uppercase tracking-widest">
+                <div className="mt-4 p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center justify-center gap-2 text-emerald-700 text-xs font-bold uppercase tracking-wider">
                   <CheckCircle size={16}/> Final Status: Patient Discharged
                 </div>
               )}
