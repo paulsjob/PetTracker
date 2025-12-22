@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 
 const ACTIVE_CLINIC_ID = 'local-demo-clinic';
+const QUICK_NOTES = ["Doing well", "Vitals stable", "In progress", "Waking up", "Ready soon", "Call pending"];
 
 interface StaffDashboardProps {
   onLogout: () => void;
@@ -44,7 +45,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         .order('updated_at', { ascending: false });
       
       if (pError) throw pError;
-
       let filtered = pData || [];
       if (!isAdminPortal) {
         filtered = filtered.filter((p: Patient) => p.doctor_id === doctor.id);
@@ -54,11 +54,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       setPatients(filtered as Patient[]);
 
       if (doctor.is_admin) {
-        const { data: dData } = await supabase
-          .from('doctors')
-          .select('*')
-          .eq('clinic_id', ACTIVE_CLINIC_ID)
-          .order('name', { ascending: true });
+        const { data: dData } = await supabase.from('doctors').select('*').eq('clinic_id', ACTIVE_CLINIC_ID).order('name', { ascending: true });
         setAllDoctors((dData || []) as Doctor[]);
       }
     } catch (error) { if (!options?.silent) showNotification('Sync Error', 'error'); }
@@ -87,6 +83,34 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     showNotification("CSV Exported");
   };
 
+  const handleCopyInvite = (patient: Patient) => {
+    const link = `${window.location.origin}/?id=${patient.id}&code=${patient.access_code}`;
+    const message = `Hello from PetTracker! Follow ${patient.name}'s status live here: \n\n${link}\n\nPatient ID: ${patient.id}\nAccess Code: ${patient.access_code}\n\nQuestions? Please contact PetTracker.io.`;
+    navigator.clipboard.writeText(message);
+    setCopiedId(patient.id);
+    setTimeout(() => setCopiedId(null), 3000);
+    showNotification("Invite copied");
+  };
+
+  const handleSendSMS = async (patient: Patient) => {
+    const phone = patient.owner_phone;
+    if (!phone) { showNotification("No phone number saved", "error"); return; }
+    setSendingSms(prev => ({ ...prev, [patient.id]: true }));
+    const stageLabel = STAGES.find(s => s.id === patient.stage)?.label || 'Checked In';
+    const clientLink = `${window.location.origin}/?id=${patient.id}&code=${patient.access_code}`;
+    try {
+      const response = await fetch('/api/send-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: phone, body: `[PetTracker] Update for ${patient.name}: Status is now ${stageLabel}. Track live: ${clientLink}` }),
+      });
+      const data = await response.json();
+      if (data.success) showNotification(`SMS sent to ${phone}`);
+      else showNotification(`Carrier Error: ${data.error}`, 'error');
+    } catch (err) { showNotification('Connection error', 'error'); } 
+    finally { setSendingSms(prev => ({ ...prev, [patient.id]: false })); }
+  };
+
   const CopyableInfo = ({ label, value, fieldKey }: { label: string, value: string, fieldKey: string }) => {
     const isCopied = copiedField === fieldKey;
     return (
@@ -102,7 +126,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
   return (
     <div className="max-w-7xl mx-auto pb-20 p-4">
-      {/* HEADER AREA with CSV Tool */}
+      {/* 1. Header with Admin Portal & CSV Icon */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-4">
           <div className={`p-3 rounded-xl text-white shadow-lg ${isAdminPortal ? 'bg-amber-500' : 'bg-indigo-600'}`}>
@@ -116,24 +140,17 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
         <div className="flex items-center gap-3">
           {doctor.is_admin && (
-            <button 
-              onClick={() => setIsAdminPortal(!isAdminPortal)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${isAdminPortal ? 'bg-indigo-600 text-white shadow-md' : 'bg-amber-50 text-amber-700 border border-amber-100 hover:bg-amber-100'}`}
-            >
+            <button onClick={() => setIsAdminPortal(!isAdminPortal)} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${isAdminPortal ? 'bg-indigo-600 text-white shadow-md' : 'bg-amber-50 text-amber-700 border border-amber-100 hover:bg-amber-100'}`}>
               {isAdminPortal ? <Users size={16}/> : <ShieldCheck size={16}/>}
               {isAdminPortal ? 'Exit Admin Mode' : 'Admin Portal'}
             </button>
           )}
-          <button onClick={handleDownloadCSV} title="Download CSV" className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl border border-slate-100 transition-all">
-            <FileDown size={20} />
-          </button>
+          <button onClick={handleDownloadCSV} title="Download CSV" className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl border border-slate-100 transition-all"><FileDown size={20} /></button>
           <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg text-sm font-bold text-slate-600 border border-slate-100 hover:bg-slate-200 transition-colors"><LogOut size={18} /> Logout</button>
         </div>
       </div>
 
-      {/* ADMIN PORTAL SECTION OMITTED FOR BREVITY */}
-
-      {/* CHECK-IN FORM */}
+      {/* 2. Check-In Form (Restored Layout) */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-8">
           <h2 className="text-sm font-bold mb-4 uppercase tracking-widest text-slate-400">Check In New Patient</h2>
           <form onSubmit={async (e) => {
@@ -150,13 +167,23 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
           </form>
       </div>
 
-      {/* TABS DIRECTLY ABOVE PATIENT LIST */}
-      <div className="flex gap-2 mb-4">
-        <button onClick={() => setViewMode('active')} className={`px-5 py-2 rounded-xl text-sm font-bold transition-all ${viewMode === 'active' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}>Active Patients</button>
-        <button onClick={() => setViewMode('discharged')} className={`px-5 py-2 rounded-xl text-sm font-bold transition-all ${viewMode === 'discharged' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}>Discharged</button>
+      {/* 3. Navigation Tabs (Moved to Gray Area above list) */}
+      <div className="flex justify-between items-end mb-4 px-2">
+        <div className="flex gap-2">
+          <button onClick={() => setViewMode('active')} className={`px-5 py-2 rounded-xl text-sm font-bold transition-all ${viewMode === 'active' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white/50 text-slate-400 hover:bg-white'}`}>Active Patients</button>
+          <button onClick={() => setViewMode('discharged')} className={`px-5 py-2 rounded-xl text-sm font-bold transition-all ${viewMode === 'discharged' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white/50 text-slate-400 hover:bg-white'}`}>Discharged</button>
+        </div>
+        {isAdminPortal && (
+          <div className="flex items-center gap-3 bg-white px-4 py-1.5 rounded-xl border border-slate-100">
+            <span className="text-[10px] font-black text-slate-400 uppercase">Viewing:</span>
+            <select value={adminDoctorFilter} onChange={(e) => setAdminDoctorFilter(e.target.value)} className="bg-transparent text-sm font-bold text-indigo-600 outline-none cursor-pointer">
+              <option value="all">Entire Clinic</option>
+              {allDoctors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
-      {/* PATIENT CARDS */}
       <div className="space-y-4">
         {patients.map(patient => (
           <div key={patient.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -166,19 +193,37 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                   <h3 className="text-xl font-bold text-gray-900">{patient.name}</h3>
                   <p className="text-sm text-gray-500 flex items-center gap-1"><User size={14}/> {patient.owner}</p>
                 </div>
+                {/* ACTION ROW RESTORED */}
                 <div className="flex gap-2">
                   <a href={`/?id=${patient.id}&code=${patient.access_code}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100"><Eye size={16}/> Preview</a>
-                  {/* INVITE & SMS ACTIONS OMITTED FOR BREVITY */}
+                  <button onClick={() => handleCopyInvite(patient)} className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100">{copiedId === patient.id ? <Check size={16} className="text-emerald-500"/> : <Copy size={16}/>} Invite</button>
+                  {viewMode === 'active' && <button onClick={() => handleSendSMS(patient)} disabled={sendingSms[patient.id]} className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-100">{sendingSms[patient.id] ? <Loader2 className="animate-spin" size={16}/> : <Send size={16}/>} Update</button>}
                   <button onClick={() => setAdvancedOpen(prev => ({ ...prev, [patient.id]: !prev[patient.id] }))} className="flex items-center gap-1 px-4 py-2 bg-slate-100 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200">Advanced {advancedOpen[patient.id] ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</button>
                 </div>
               </div>
               
-              {/* ADVANCED SECTION with LEGIBLE LABELS */}
-              <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mt-6">
+              {advancedOpen[patient.id] && (
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 animate-in slide-in-from-top-2">
+                  <div className="mb-4">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Internal Note</label>
+                    <textarea onBlur={(e) => api.updateStage(patient.id, patient.stage, doctor.id, e.target.value)} defaultValue={patient.note || ''} className="w-full p-3 text-sm border rounded-lg h-20 outline-none focus:ring-2 focus:ring-indigo-50 bg-white" placeholder="Add commentary..." />
+                  </div>
+                  <div className="flex flex-wrap justify-between items-end pt-4 border-t gap-y-4">
+                    <div className="flex flex-wrap items-center gap-x-10 gap-y-4">
+                      <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-xs font-bold text-indigo-600 flex items-center gap-1 hover:underline"><History size={14}/> View Logs</button>
+                      <CopyableInfo label="ID" value={patient.id} fieldKey={`${patient.id}-id`} />
+                      <CopyableInfo label="Code" value={patient.access_code} fieldKey={`${patient.id}-code`} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STAGES BUTTONS (Hover fix included) */}
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
                 {STAGES.map((stage) => {
                   const isActive = patient.stage === stage.id;
                   return (
-                    <button key={stage.id} onClick={() => { if(viewMode === 'active') api.updateStage(patient.id, stage.id as StageId, doctor.id) }} disabled={viewMode === 'discharged'} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${isActive && viewMode === 'active' ? `${stage.color} border-transparent text-white shadow-lg` : 'bg-white border-slate-100 text-slate-500'} ${viewMode === 'discharged' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-50'}`}>
+                    <button key={stage.id} onClick={() => { if(viewMode === 'active') api.updateStage(patient.id, stage.id as StageId, doctor.id) }} disabled={viewMode === 'discharged'} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${isActive && viewMode === 'active' ? `${stage.color} border-transparent text-white shadow-lg` : 'bg-white border-slate-100 text-slate-500 hover:text-slate-900'} ${viewMode === 'discharged' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-50'}`}>
                       <stage.icon size={20} className="mb-1" />
                       <span className="text-xs font-bold leading-tight">{stage.label}</span>
                     </button>
