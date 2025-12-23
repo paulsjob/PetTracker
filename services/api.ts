@@ -1,7 +1,6 @@
 import { supabase } from './supabase';
 import { Patient, Doctor, StageId, PatientStageEvent } from '../types';
-
-const CLINIC_ID = 'default';
+import { CLINIC_ID } from '../constants';
 
 export const api = {
   login: async (pin: string, clinicId: string = CLINIC_ID): Promise<Doctor | null> => {
@@ -16,7 +15,6 @@ export const api = {
     return data as Doctor | null;
   },
 
-  // RESTORED: App.tsx requires this function for parent logins
   loginPatientWithId: async (id: string, code: string): Promise<Patient | null> => {
     if (!supabase) return null;
     const { data, error } = await supabase
