@@ -4,7 +4,7 @@ import { ClientTracker } from './components/ClientTracker';
 import { ViewState, Doctor } from './types';
 import { api } from './services/api';
 import { Lock, Activity, ArrowRight, Eye, EyeOff, PawPrint, User, UserCog, Hash } from 'lucide-react';
-import { CLINIC_CONFIG, DEMO_MODE } from './constants';
+import { CLINIC_ID, CLINIC_CONFIG, DEMO_MODE } from './constants';
 
 export default function App() {
   const [view, setView] = useState<ViewState>('landing');
@@ -38,8 +38,7 @@ export default function App() {
     setError('');
 
     try {
-      // FORCED SYNC: We explicitly use 'default' here to match your Supabase table
-      const doctor = await api.login(pin, 'default');
+      const doctor = await api.login(pin, CLINIC_ID);
       if (doctor) {
         setCurrentDoctor(doctor);
         setView('staff-dashboard');

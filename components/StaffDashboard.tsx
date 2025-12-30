@@ -2,14 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { supabase } from '../services/supabase';
 import { Patient, Doctor, StageId } from '../types';
-import { STAGES } from '../constants';
+import { STAGES, CLINIC_ID } from '../constants';
 import { 
   Plus, LogOut, Dog, Stethoscope, History, ChevronDown, ChevronUp, 
   Send, Loader2, User, Eye, Archive, Copy, Check, AlertTriangle, 
   FileDown, CheckCircle, ShieldCheck, Users, UserPlus, UserMinus, Trash2, X, PlusCircle
 } from 'lucide-react';
 
-const ACTIVE_CLINIC_ID = 'local-demo-clinic';
 const QUICK_NOTES = ["Doing well", "Vitals stable", "In progress", "Waking up", "Ready soon", "Call pending"];
 
 interface StaffDashboardProps {
@@ -47,11 +46,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     try {
       if (!supabase) return;
       
-      // FIX: LOCK TO ALPHABETICAL ORDER (name)
       const { data: pData } = await supabase
         .from('patients')
         .select('*')
-        .eq('clinic_id', ACTIVE_CLINIC_ID)
+        .eq('clinic_id', CLINIC_ID)
         .eq('status', viewMode)
         .order('name', { ascending: true });
       
@@ -60,7 +58,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       else if (adminDoctorFilter !== 'all') { filtered = filtered.filter((p: Patient) => p.doctor_id === adminDoctorFilter); }
       setPatients(filtered as Patient[]);
 
-      const { data: dData } = await supabase.from('doctors').select('*').eq('clinic_id', ACTIVE_CLINIC_ID).order('name', { ascending: true });
+      const { data: dData } = await supabase.from('doctors').select('*').eq('clinic_id', CLINIC_ID).order('name', { ascending: true });
       if (dData) setAllDoctors(dData as Doctor[]);
     } catch (error) { if (!options?.silent) showNotification('Sync Error', 'error'); }
   };
@@ -179,7 +177,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         </div>
       </div>
 
-      {/* 3. ADMIN TOOLS - RE-POSITIONED & VISIBLE */}
+      {/* 3. ADMIN TOOLS */}
       {isAdminPortal && (
         <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in slide-in-from-top-4 duration-300">
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
@@ -187,7 +185,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             <form onSubmit={async (e) => {
                e.preventDefault();
                const id = `doc-${Math.random().toString(36).substring(2, 8)}`;
-               const { error } = await supabase.from('doctors').insert([{ ...newStaff, id, clinic_id: ACTIVE_CLINIC_ID, is_active: true, is_admin: false }]);
+               const { error } = await supabase.from('doctors').insert([{ ...newStaff, id, clinic_id: CLINIC_ID, is_active: true, is_admin: false }]);
                if (!error) { setNewStaff({ ...newStaff, name: '', pin: '' }); loadData(); showNotification("User Added"); }
             }} className="space-y-5">
               <input type="text" value={newStaff.name} onChange={(e) => setNewStaff({...newStaff, name: e.target.value})} placeholder="Provider Full Name" className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-amber-500" />
@@ -232,7 +230,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             e.preventDefault();
             const id = Math.random().toString(36).substring(2, 14);
             const code = Math.floor(100000 + Math.random() * 900000).toString();
-            const { error } = await supabase.from('patients').insert([{ ...newPatient, id, clinic_id: ACTIVE_CLINIC_ID, doctor_id: doctor.id, stage: 'checked-in', status: 'active', access_code: code, stage_history: [] }]);
+            const { error } = await supabase.from('patients').insert([{ ...newPatient, id, clinic_id: CLINIC_ID, doctor_id: doctor.id, stage: 'checked-in', status: 'active', access_code: code, stage_history: [] }]);
             if (!error) { setNewPatient({ name: '', owner: '', owner_phone: '' }); loadData(); showNotification("Checked in!"); }
           }} className="grid grid-cols-1 md:grid-cols-12 gap-6">
             <div className="md:col-span-3"><input type="text" value={newPatient.name} onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Pet Name" /></div>
