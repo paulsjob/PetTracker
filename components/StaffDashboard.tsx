@@ -7,7 +7,7 @@ import { ClinicContactSettings, getClinicContactSettings, setClinicContactSettin
 import { 
   Plus, LogOut, Dog, Stethoscope, History, ChevronDown, ChevronUp, 
   Send, Loader2, User, Eye, Archive, Copy, Check, AlertTriangle, 
-  FileDown, CheckCircle, ShieldCheck, Users, UserPlus, UserMinus, Trash2, X, PlusCircle
+  FileDown, CheckCircle, ShieldCheck, Users, UserPlus, UserMinus, Trash2, X, Settings
 } from 'lucide-react';
 
 const QUICK_NOTES = ["Doing well", "Vitals stable", "In progress", "Waking up", "Ready soon", "Call pending"];
@@ -23,6 +23,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const [allDoctors, setAllDoctors] = useState<Doctor[]>([]);
   const [viewMode, setViewMode] = useState<'active' | 'discharged'>('active');
   const [isAdminPortal, setIsAdminPortal] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [adminDoctorFilter, setAdminDoctorFilter] = useState<string>('all');
   
   // SPECIALTY & STAFF MANAGEMENT
@@ -108,6 +109,27 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     finally { setSendingSms(prev => ({ ...prev, [patient.id]: false })); }
   };
 
+  const toggleDoctorAdmin = async (targetDoctor: Doctor) => {
+    const nextAdminValue = !targetDoctor.is_admin;
+    if (targetDoctor.id === doctor.id && !nextAdminValue) {
+      showNotification('You cannot remove your own admin access', 'error');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('doctors')
+      .update({ is_admin: nextAdminValue })
+      .eq('id', targetDoctor.id);
+
+    if (error) {
+      showNotification('Failed to update admin access', 'error');
+      return;
+    }
+
+    showNotification(nextAdminValue ? 'Admin access granted' : 'Admin access removed');
+    await loadData({ silent: true });
+  };
+
   const CopyableInfo = ({ label, value, fieldKey, customDisplay }: { label: string, value: string, fieldKey: string, customDisplay?: string }) => {
     const isCopied = copiedField === fieldKey;
     return (
@@ -159,54 +181,27 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       {notification && (
         <div className={`fixed top-4 right-4 px-6 py-4 rounded-lg shadow-xl z-50 text-white font-bold bg-indigo-600`}>{notification.msg}</div>
       )}
-      
-      {/* 2. HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-        <div className="flex items-center gap-5">
-          <div className={`p-4 rounded-2xl text-white shadow-lg ${isAdminPortal ? 'bg-amber-500' : 'bg-indigo-600'}`}><Stethoscope size={28}/></div>
-          <div>
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">{isAdminPortal ? 'Clinic Admin' : doctor.name}</h1>
-            <p className="text-indigo-600 font-semibold text-base">{isAdminPortal ? 'Operations Management' : doctor.specialty}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          {doctor.is_admin && (
-            <button onClick={() => setIsAdminPortal(!isAdminPortal)} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all ${isAdminPortal ? 'bg-indigo-600 text-white shadow-md' : 'bg-amber-50 text-amber-700 border border-amber-100 hover:bg-amber-100'}`}>
-              {isAdminPortal ? <Dog size={18}/> : <ShieldCheck size={18}/>} {isAdminPortal ? 'Patient Board' : 'Admin Portal'}
-            </button>
-          )}
-          <button onClick={onLogout} className="flex items-center gap-2 px-6 py-3 bg-slate-50 rounded-xl text-sm font-bold text-slate-700 border border-slate-200 hover:bg-white hover:text-red-600 transition-all"><LogOut size={18} /> Logout</button>
-        </div>
-      </div>
 
-      {/* 3. ADMIN TOOLS */}
-      {isAdminPortal && (
-        <div className="mb-8 grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in slide-in-from-top-4 duration-300">
-          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-            <h2 className="text-base font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wide"><UserPlus size={20}/> Onboard Provider</h2>
-            <form onSubmit={async (e) => {
-               e.preventDefault();
-               const id = `doc-${Math.random().toString(36).substring(2, 8)}`;
-               const { error } = await supabase.from('doctors').insert([{ ...newStaff, id, clinic_id: CLINIC_ID, is_active: true, is_admin: false }]);
-               if (!error) { setNewStaff({ ...newStaff, name: '', pin: '' }); loadData(); showNotification("User Added"); }
-            }} className="space-y-5">
-              <input type="text" value={newStaff.name} onChange={(e) => setNewStaff({...newStaff, name: e.target.value})} placeholder="Provider Full Name" className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-amber-500" />
-              <select value={newStaff.specialty} onChange={(e) => setNewStaff({...newStaff, specialty: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold text-slate-700 outline-none">
-                  {specialties.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <input type="text" maxLength={4} value={newStaff.pin} onChange={(e) => setNewStaff({...newStaff, pin: e.target.value.replace(/\D/g,'')})} placeholder="PIN (4 Digits)" className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-bold tracking-[0.2em] outline-none" />
-              <button type="submit" className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg rounded-2xl shadow-lg transition-all">Add Staff Member</button>
-            </form>
-          </div>
-          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-            <h2 className="text-base font-bold text-slate-400 mb-6 uppercase tracking-wide">Client Footer Contact</h2>
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[220] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full overflow-hidden font-sans border border-slate-100">
+            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Admin Settings</h3>
+                <p className="text-sm text-slate-500 font-medium">Client footer contact information</p>
+              </div>
+              <button onClick={() => setIsSettingsOpen(false)} className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors">
+                <X size={20} />
+              </button>
+            </div>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 setClinicContactSettings(clinicContactForm);
                 showNotification('Contact footer updated');
+                setIsSettingsOpen(false);
               }}
-              className="space-y-4"
+              className="p-8 space-y-4"
             >
               <div>
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Clinic Name</label>
@@ -230,6 +225,52 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
               </div>
             </form>
           </div>
+        </div>
+      )}
+      
+      {/* 2. HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+        <div className="flex items-center gap-5">
+          <div className={`p-4 rounded-2xl text-white shadow-lg ${isAdminPortal ? 'bg-amber-500' : 'bg-indigo-600'}`}><Stethoscope size={28}/></div>
+          <div>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">{isAdminPortal ? 'Clinic Admin' : doctor.name}</h1>
+            <p className="text-indigo-600 font-semibold text-base">{isAdminPortal ? 'Operations Management' : doctor.specialty}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          {doctor.is_admin && (
+            <button onClick={() => setIsAdminPortal(!isAdminPortal)} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all ${isAdminPortal ? 'bg-indigo-600 text-white shadow-md' : 'bg-amber-50 text-amber-700 border border-amber-100 hover:bg-amber-100'}`}>
+              {isAdminPortal ? <Dog size={18}/> : <ShieldCheck size={18}/>} {isAdminPortal ? 'Patient Board' : 'Admin Portal'}
+            </button>
+          )}
+          {doctor.is_admin && (
+            <button onClick={() => setIsSettingsOpen(true)} className="flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-xl text-sm font-bold text-slate-700 border border-slate-200 hover:bg-white hover:text-indigo-600 transition-all" aria-label="Open admin settings">
+              <Settings size={18} /> Settings
+            </button>
+          )}
+          <button onClick={onLogout} className="flex items-center gap-2 px-6 py-3 bg-slate-50 rounded-xl text-sm font-bold text-slate-700 border border-slate-200 hover:bg-white hover:text-red-600 transition-all"><LogOut size={18} /> Logout</button>
+        </div>
+      </div>
+
+      {/* 3. ADMIN TOOLS */}
+      {isAdminPortal && (
+        <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in slide-in-from-top-4 duration-300">
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+            <h2 className="text-base font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wide"><UserPlus size={20}/> Onboard Provider</h2>
+            <form onSubmit={async (e) => {
+               e.preventDefault();
+               const id = `doc-${Math.random().toString(36).substring(2, 8)}`;
+               const { error } = await supabase.from('doctors').insert([{ ...newStaff, id, clinic_id: CLINIC_ID, is_active: true, is_admin: false }]);
+               if (!error) { setNewStaff({ ...newStaff, name: '', pin: '' }); loadData(); showNotification("User Added"); }
+            }} className="space-y-5">
+              <input type="text" value={newStaff.name} onChange={(e) => setNewStaff({...newStaff, name: e.target.value})} placeholder="Provider Full Name" className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-amber-500" />
+              <select value={newStaff.specialty} onChange={(e) => setNewStaff({...newStaff, specialty: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold text-slate-700 outline-none">
+                  {specialties.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <input type="text" maxLength={4} value={newStaff.pin} onChange={(e) => setNewStaff({...newStaff, pin: e.target.value.replace(/\D/g,'')})} placeholder="PIN (4 Digits)" className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-bold tracking-[0.2em] outline-none" />
+              <button type="submit" className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg rounded-2xl shadow-lg transition-all">Add Staff Member</button>
+            </form>
+          </div>
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col overflow-hidden">
              <h2 className="text-base font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wide"><Users size={20}/> Clinical Staff Directory</h2>
              <div className="flex-1 overflow-y-auto max-h-[460px]">
@@ -244,6 +285,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                         <td className="py-5 font-mono text-slate-500 font-bold tracking-widest">{doc.pin}</td>
                         <td className="py-5 text-right">
                           <div className="flex justify-end gap-3">
+                             <button onClick={() => toggleDoctorAdmin(doc)} className={`px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wide transition-all ${doc.is_admin ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'}`}>
+                               {doc.is_admin ? 'Remove Admin' : 'Make Admin'}
+                             </button>
                              <button onClick={() => supabase.from('doctors').update({ is_active: !doc.is_active }).eq('id', doc.id).then(() => loadData())} className={`p-3 rounded-2xl transition-all ${doc.is_active ? 'text-slate-300 hover:text-amber-600 hover:bg-amber-50' : 'text-emerald-500 bg-emerald-50'}`}>{doc.is_active ? <UserMinus size={22}/> : <CheckCircle size={22}/>}</button>
                              {!doc.is_admin && <button onClick={() => setDeleteTarget(doc)} className="p-3 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={22}/></button>}
                           </div>
