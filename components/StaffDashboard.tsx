@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import { supabase } from '../services/supabase';
 import { Patient, Doctor, StageId } from '../types';
 import { STAGES, CLINIC_ID } from '../constants';
+import { ClinicContactSettings, getClinicContactSettings, setClinicContactSettings } from '../services/clinicSettings';
 import { 
   Plus, LogOut, Dog, Stethoscope, History, ChevronDown, ChevronUp, 
   Send, Loader2, User, Eye, Archive, Copy, Check, AlertTriangle, 
@@ -37,6 +38,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   
   const [newPatient, setNewPatient] = useState({ name: '', owner: '', owner_phone: '' });
   const [newStaff, setNewStaff] = useState({ name: '', specialty: 'Internal Medicine', pin: '' });
+  const [clinicContactForm, setClinicContactForm] = useState<ClinicContactSettings>(getClinicContactSettings());
   
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
@@ -179,7 +181,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
       {/* 3. ADMIN TOOLS */}
       {isAdminPortal && (
-        <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in slide-in-from-top-4 duration-300">
+        <div className="mb-8 grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in slide-in-from-top-4 duration-300">
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
             <h2 className="text-base font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wide"><UserPlus size={20}/> Onboard Provider</h2>
             <form onSubmit={async (e) => {
@@ -194,6 +196,38 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
               </select>
               <input type="text" maxLength={4} value={newStaff.pin} onChange={(e) => setNewStaff({...newStaff, pin: e.target.value.replace(/\D/g,'')})} placeholder="PIN (4 Digits)" className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-bold tracking-[0.2em] outline-none" />
               <button type="submit" className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg rounded-2xl shadow-lg transition-all">Add Staff Member</button>
+            </form>
+          </div>
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+            <h2 className="text-base font-bold text-slate-400 mb-6 uppercase tracking-wide">Client Footer Contact</h2>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setClinicContactSettings(clinicContactForm);
+                showNotification('Contact footer updated');
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Clinic Name</label>
+                <input type="text" value={clinicContactForm.name} onChange={(e) => setClinicContactForm({ ...clinicContactForm, name: e.target.value })} placeholder="Clinic Name" className="mt-1 w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Phone</label>
+                <input type="text" value={clinicContactForm.phone} onChange={(e) => setClinicContactForm({ ...clinicContactForm, phone: e.target.value })} placeholder="(555) 123-4567" className="mt-1 w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Hours</label>
+                <input type="text" value={clinicContactForm.hours} onChange={(e) => setClinicContactForm({ ...clinicContactForm, hours: e.target.value })} placeholder="Mon–Fri 8am–6pm" className="mt-1 w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Email (Optional)</label>
+                <input type="email" value={clinicContactForm.email} onChange={(e) => setClinicContactForm({ ...clinicContactForm, email: e.target.value })} placeholder="hello@yourclinic.com" className="mt-1 w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-3 rounded-xl transition-colors">Save Footer</button>
+                <button type="button" onClick={() => setClinicContactForm(getClinicContactSettings())} className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors">Reset</button>
+              </div>
             </form>
           </div>
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col overflow-hidden">
