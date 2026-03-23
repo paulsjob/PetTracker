@@ -15,6 +15,7 @@ Follow these steps to enable multi-device synchronization for the pilot.
 - Open the **SQL Editor** in your Supabase dashboard.
 - Create a new query and paste the contents of `supabase_schema.sql`.
 - Click **Run**. This will create the `doctors` and `patients` tables and insert demo accounts.
+- Create a second query and run `supabase_clinic_settings.sql` to create shared clinic footer settings storage used by the admin Settings panel.
 
 ### 3. Configure Environment Variables
 The app automatically looks for Supabase credentials. Ensure your environment provides:
