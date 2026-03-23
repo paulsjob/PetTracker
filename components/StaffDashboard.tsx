@@ -77,6 +77,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     setTimeout(() => setNotification(null), 5000);
   };
 
+  const runAdminAction = async (action: () => PromiseLike<void> | void) => {
+    if (!doctor.is_admin) {
+      showNotification('Admin access required', 'error');
+      return;
+    }
+
+    await action();
+  };
+
   const handleStatusUpdate = async (patientId: string, newStage: StageId) => {
     if (updatingIds[patientId]) return;
     setUpdatingIds(prev => ({ ...prev, [patientId]: true }));
@@ -156,7 +165,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             </div>
             <div className="flex border-t border-slate-100">
               <button onClick={() => setDeleteTarget(null)} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 border-r border-slate-100">Cancel</button>
-              <button onClick={async () => { await supabase.from('doctors').delete().eq('id', deleteTarget.id); setDeleteTarget(null); loadData(); showNotification("User Deleted"); }} className="flex-1 px-6 py-4 text-sm font-bold text-red-600 hover:bg-red-50">Delete</button>
+              <button onClick={async () => runAdminAction(async () => { await supabase.from('doctors').delete().eq('id', deleteTarget.id); setDeleteTarget(null); loadData(); showNotification("User Deleted"); })} className="flex-1 px-6 py-4 text-sm font-bold text-red-600 hover:bg-red-50">Delete</button>
             </div>
           </div>
         </div>
@@ -195,11 +204,13 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
               </button>
             </div>
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                setClinicContactSettings(clinicContactForm);
-                showNotification('Contact footer updated');
-                setIsSettingsOpen(false);
+                await runAdminAction(() => {
+                  setClinicContactSettings(clinicContactForm);
+                  showNotification('Contact footer updated');
+                  setIsSettingsOpen(false);
+                });
               }}
               className="p-8 space-y-4"
             >
@@ -259,9 +270,21 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             <h2 className="text-base font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wide"><UserPlus size={20}/> Onboard Provider</h2>
             <form onSubmit={async (e) => {
                e.preventDefault();
-               const id = `doc-${Math.random().toString(36).substring(2, 8)}`;
-               const { error } = await supabase.from('doctors').insert([{ ...newStaff, id, clinic_id: CLINIC_ID, is_active: true, is_admin: false }]);
-               if (!error) { setNewStaff({ ...newStaff, name: '', pin: '' }); loadData(); showNotification("User Added"); }
+               if (!newStaff.name.trim()) {
+                 showNotification('Provider name is required', 'error');
+                 return;
+               }
+               if (newStaff.pin.length !== 4) {
+                 showNotification('PIN must be 4 digits', 'error');
+                 return;
+               }
+
+               await runAdminAction(async () => {
+                 const id = `doc-${Math.random().toString(36).substring(2, 8)}`;
+                 const { error } = await supabase.from('doctors').insert([{ ...newStaff, name: newStaff.name.trim(), id, clinic_id: CLINIC_ID, is_active: true, is_admin: false }]);
+                 if (!error) { setNewStaff({ ...newStaff, name: '', pin: '' }); loadData(); showNotification("User Added"); }
+                 else { showNotification('Unable to add staff member', 'error'); }
+               });
             }} className="space-y-5">
               <input type="text" value={newStaff.name} onChange={(e) => setNewStaff({...newStaff, name: e.target.value})} placeholder="Provider Full Name" className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-amber-500" />
               <select value={newStaff.specialty} onChange={(e) => setNewStaff({...newStaff, specialty: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold text-slate-700 outline-none">
@@ -285,10 +308,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                         <td className="py-5 font-mono text-slate-500 font-bold tracking-widest">{doc.pin}</td>
                         <td className="py-5 text-right">
                           <div className="flex justify-end gap-3">
-                             <button onClick={() => toggleDoctorAdmin(doc)} className={`px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wide transition-all ${doc.is_admin ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'}`}>
+                             <button onClick={() => runAdminAction(() => toggleDoctorAdmin(doc))} className={`px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wide transition-all ${doc.is_admin ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'}`}>
                                {doc.is_admin ? 'Remove Admin' : 'Make Admin'}
                              </button>
-                             <button onClick={() => supabase.from('doctors').update({ is_active: !doc.is_active }).eq('id', doc.id).then(() => loadData())} className={`p-3 rounded-2xl transition-all ${doc.is_active ? 'text-slate-300 hover:text-amber-600 hover:bg-amber-50' : 'text-emerald-500 bg-emerald-50'}`}>{doc.is_active ? <UserMinus size={22}/> : <CheckCircle size={22}/>}</button>
+                             <button onClick={() => runAdminAction(() => supabase.from('doctors').update({ is_active: !doc.is_active }).eq('id', doc.id).then(() => loadData()))} className={`p-3 rounded-2xl transition-all ${doc.is_active ? 'text-slate-300 hover:text-amber-600 hover:bg-amber-50' : 'text-emerald-500 bg-emerald-50'}`}>{doc.is_active ? <UserMinus size={22}/> : <CheckCircle size={22}/>}</button>
                              {!doc.is_admin && <button onClick={() => setDeleteTarget(doc)} className="p-3 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={22}/></button>}
                           </div>
                         </td>
