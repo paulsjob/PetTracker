@@ -10,6 +10,7 @@ export const api = {
       .select('*')
       .eq('clinic_id', clinicId)
       .eq('pin', pin)
+      .eq('is_active', true)
       .maybeSingle();
     if (error) return null;
     return data as Doctor | null;
