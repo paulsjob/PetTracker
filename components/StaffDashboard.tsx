@@ -3,7 +3,14 @@ import { api } from '../services/api';
 import { supabase } from '../services/supabase';
 import { Patient, Doctor, StageId } from '../types';
 import { STAGES, CLINIC_ID } from '../constants';
-import { ClinicContactSettings, getClinicContactSettings, setClinicContactSettings } from '../services/clinicSettings';
+import {
+  ClinicContactSettings,
+  clinicContactUpdateEvent,
+  getClinicContactSettings,
+  loadClinicContactSettings,
+  saveClinicContactSettings,
+  subscribeToClinicContactSettings,
+} from '../services/clinicSettings';
 import { 
   Plus, LogOut, Dog, Stethoscope, History, ChevronDown, ChevronUp, 
   Send, Loader2, User, Eye, Archive, Copy, Check, AlertTriangle, 
@@ -71,6 +78,35 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     const channel = supabase?.channel('dashboard-live').on('postgres_changes', { event: '*', schema: 'public', table: 'patients' }, () => loadData({ silent: true })).subscribe();
     return () => { if (channel) supabase?.removeChannel(channel); };
   }, [doctor.id, viewMode, isAdminPortal, adminDoctorFilter]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const refreshClinicContact = async () => {
+      const settings = await loadClinicContactSettings(CLINIC_ID);
+      if (isMounted) setClinicContactForm(settings);
+    };
+
+    void refreshClinicContact();
+
+    const handleContactUpdate = () => {
+      void refreshClinicContact();
+    };
+
+    const unsubscribe = subscribeToClinicContactSettings(CLINIC_ID, (settings) => {
+      if (isMounted) setClinicContactForm(settings);
+    });
+
+    window.addEventListener(clinicContactUpdateEvent, handleContactUpdate);
+    window.addEventListener('storage', handleContactUpdate);
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+      window.removeEventListener(clinicContactUpdateEvent, handleContactUpdate);
+      window.removeEventListener('storage', handleContactUpdate);
+    };
+  }, []);
 
   const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
     setNotification({ msg, type });
@@ -206,9 +242,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                await runAdminAction(() => {
-                  setClinicContactSettings(clinicContactForm);
-                  showNotification('Contact footer updated');
+                await runAdminAction(async () => {
+                  const result = await saveClinicContactSettings(clinicContactForm, CLINIC_ID);
+                  showNotification(result.source === 'remote' ? 'Contact footer updated for the clinic' : 'Contact footer saved locally');
+                  setClinicContactForm(result.settings);
                   setIsSettingsOpen(false);
                 });
               }}
@@ -232,7 +269,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-3 rounded-xl transition-colors">Save Footer</button>
-                <button type="button" onClick={() => setClinicContactForm(getClinicContactSettings())} className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors">Reset</button>
+                <button type="button" onClick={() => { void loadClinicContactSettings(CLINIC_ID).then(setClinicContactForm); }} className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors">Reset</button>
               </div>
             </form>
           </div>

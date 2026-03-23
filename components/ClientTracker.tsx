@@ -1,9 +1,14 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Patient } from '../types';
-import { STAGES, CLINIC_CONFIG } from '../constants';
+import { STAGES, CLINIC_CONFIG, CLINIC_ID } from '../constants';
 import { api } from '../services/api';
 import { RefreshCw, CheckCircle, Phone, Calendar, MessageCircle, Mail, Clock } from 'lucide-react';
-import { clinicContactUpdateEvent, getClinicContactSettings } from '../services/clinicSettings';
+import {
+  clinicContactUpdateEvent,
+  getClinicContactSettings,
+  loadClinicContactSettings,
+  subscribeToClinicContactSettings,
+} from '../services/clinicSettings';
 
 interface ClientTrackerProps {
   patientId: string;
@@ -15,7 +20,7 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  const [clinicContact, setClinicContact] = useState(getClinicContactSettings());
+  const [clinicContact, setClinicContact] = useState(getClinicContactSettings(CLINIC_ID));
   const fetchingRef = useRef(false);
 
   const fetchStatus = async () => {
@@ -37,11 +42,29 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
   }, [patientId]);
 
   useEffect(() => {
-    const handleContactUpdate = () => setClinicContact(getClinicContactSettings());
+    let isMounted = true;
+
+    const refreshClinicContact = async () => {
+      const nextSettings = await loadClinicContactSettings(CLINIC_ID);
+      if (isMounted) setClinicContact(nextSettings);
+    };
+
+    refreshClinicContact();
+
+    const handleContactUpdate = () => {
+      void refreshClinicContact();
+    };
+
+    const unsubscribe = subscribeToClinicContactSettings(CLINIC_ID, (settings) => {
+      if (isMounted) setClinicContact(settings);
+    });
+
     window.addEventListener(clinicContactUpdateEvent, handleContactUpdate);
     window.addEventListener('storage', handleContactUpdate);
 
     return () => {
+      isMounted = false;
+      unsubscribe();
       window.removeEventListener(clinicContactUpdateEvent, handleContactUpdate);
       window.removeEventListener('storage', handleContactUpdate);
     };
