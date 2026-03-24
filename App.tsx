@@ -5,6 +5,13 @@ import { ViewState, Doctor } from './types';
 import { api } from './services/api';
 import { Lock, Activity, ArrowRight, Eye, EyeOff, PawPrint, User, UserCog, Hash } from 'lucide-react';
 import { CLINIC_ID, CLINIC_CONFIG, DEMO_MODE } from './constants';
+import {
+  clearFailedAttempts,
+  formatLockoutMessage,
+  getLockoutRemainingMs,
+  registerFailedAttempt,
+  sanitizePatientId,
+} from './services/authSecurity';
 
 export default function App() {
   const [view, setView] = useState<ViewState>('landing');
@@ -16,6 +23,8 @@ export default function App() {
   const [accessCode, setAccessCode] = useState('');
   const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState('');
+  const [staffLockoutMessage, setStaffLockoutMessage] = useState('');
+  const [patientLockoutMessage, setPatientLockoutMessage] = useState('');
   
   const [currentDoctor, setCurrentDoctor] = useState<Doctor | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -32,19 +41,47 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    const updateLockoutState = () => {
+      const staffRemaining = getLockoutRemainingMs('staff');
+      const patientRemaining = getLockoutRemainingMs('patient');
+      setStaffLockoutMessage(staffRemaining > 0 ? formatLockoutMessage(staffRemaining) : '');
+      setPatientLockoutMessage(patientRemaining > 0 ? formatLockoutMessage(patientRemaining) : '');
+    };
+
+    updateLockoutState();
+    const intervalId = window.setInterval(updateLockoutState, 1000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   const handleDoctorLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    const remainingMs = getLockoutRemainingMs('staff');
+    if (remainingMs > 0) {
+      const message = formatLockoutMessage(remainingMs);
+      setError(message);
+      setStaffLockoutMessage(message);
+      return;
+    }
+
     setIsLoggingIn(true);
     setError('');
 
     try {
       const doctor = await api.login(pin, CLINIC_ID);
       if (doctor) {
+        clearFailedAttempts('staff');
+        setStaffLockoutMessage('');
         setCurrentDoctor(doctor);
         setView('staff-dashboard');
         setPin('');
       } else {
-        setError('Invalid PIN. Please try again.');
+        const result = registerFailedAttempt('staff');
+        const message = result.lockedUntil
+          ? formatLockoutMessage(result.lockedUntil - Date.now())
+          : `Invalid PIN. ${result.attemptsRemaining} attempt${result.attemptsRemaining === 1 ? '' : 's'} remaining.`;
+        setError(message);
+        setStaffLockoutMessage(result.lockedUntil ? message : '');
         setPin('');
       }
     } catch (err) {
@@ -56,11 +93,19 @@ export default function App() {
 
   const handlePatientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    const remainingMs = getLockoutRemainingMs('patient');
+    if (remainingMs > 0) {
+      const message = formatLockoutMessage(remainingMs);
+      setError(message);
+      setPatientLockoutMessage(message);
+      return;
+    }
+
     setIsLoggingIn(true);
     setError('');
 
     try {
-      const targetId = prefilledId || manualPatientId;
+      const targetId = sanitizePatientId(prefilledId || manualPatientId);
       if (!targetId) {
         setError('Patient ID is required.');
         setIsLoggingIn(false);
@@ -70,6 +115,8 @@ export default function App() {
       const patient = await api.loginPatientWithId(targetId, accessCode);
 
       if (patient) {
+        clearFailedAttempts('patient');
+        setPatientLockoutMessage('');
         setSelectedPatientId(patient.id);
         setValidatedAccessCode(accessCode);
         setView('client-tracker');
@@ -77,7 +124,12 @@ export default function App() {
         setManualPatientId('');
         setPrefilledId(null);
       } else {
-        setError('Invalid Patient ID or Access Code.');
+        const result = registerFailedAttempt('patient');
+        const message = result.lockedUntil
+          ? formatLockoutMessage(result.lockedUntil - Date.now())
+          : `Invalid Patient ID or Access Code. ${result.attemptsRemaining} attempt${result.attemptsRemaining === 1 ? '' : 's'} remaining.`;
+        setError(message);
+        setPatientLockoutMessage(result.lockedUntil ? message : '');
       }
     } catch (err) {
       setError('Connection failed.');
@@ -154,12 +206,12 @@ export default function App() {
                   <input
                     type={showPin ? "text" : "password"}
                     value={pin}
-                    onChange={(e) => setPin(e.target.value)}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                     className="w-full px-4 py-4 text-center text-2xl font-bold tracking-widest bg-white text-gray-900 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 outline-none transition-all"
                     placeholder="••••"
                     maxLength={4}
                     autoFocus
-                    disabled={isLoggingIn}
+                    disabled={isLoggingIn || !!staffLockoutMessage}
                   />
                   <button 
                     type="button"
@@ -170,11 +222,12 @@ export default function App() {
                   </button>
                 </div>
                 
+                {staffLockoutMessage && <div className="text-amber-600 text-center mb-3 text-sm font-semibold">{staffLockoutMessage}</div>}
                 {error && <div className="text-red-500 text-center mb-4 text-sm font-medium animate-pulse">{error}</div>}
                 
                 <button 
                   type="submit" 
-                  disabled={isLoggingIn}
+                  disabled={isLoggingIn || !!staffLockoutMessage || pin.length < 4}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 group"
                 >
                   {isLoggingIn ? 'Verifying...' : 'Access Dashboard'}
@@ -242,7 +295,7 @@ export default function App() {
                     <input
                       type="text"
                       value={prefilledId || manualPatientId}
-                      onChange={(e) => !prefilledId && setManualPatientId(e.target.value)}
+                      onChange={(e) => !prefilledId && setManualPatientId(sanitizePatientId(e.target.value))}
                       disabled={!!prefilledId}
                       className={`w-full pl-10 pr-4 py-3 font-mono text-sm border rounded-xl outline-none transition-all ${
                         prefilledId 
@@ -273,11 +326,12 @@ export default function App() {
                   />
                 </div>
                 
+                {patientLockoutMessage && <div className="text-amber-600 text-center mb-3 text-sm font-semibold">{patientLockoutMessage}</div>}
                 {error && <div className="text-red-500 text-center mb-4 text-sm font-medium animate-pulse">{error}</div>}
                 
                 <button 
                   type="submit" 
-                  disabled={isLoggingIn || accessCode.length < 6 || (!prefilledId && !manualPatientId)}
+                  disabled={isLoggingIn || !!patientLockoutMessage || accessCode.length < 6 || (!prefilledId && !manualPatientId)}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 group"
                 >
                   {isLoggingIn ? 'Checking...' : 'Track My Pet'}

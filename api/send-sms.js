@@ -5,7 +5,9 @@ const authToken = process.env.TWILIO_AUTH_TOKEN;
 const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
 const fromNumber = process.env.TWILIO_PHONE_NUMBER;
 
-const client = twilio(accountSid, authToken);
+const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
+const MAX_MESSAGE_LENGTH = 320;
+const PHONE_PATTERN = /^\+?[1-9]\d{9,14}$/;
 
 export default async function handler(req, res) {
   // Only allow POST requests
@@ -20,10 +22,25 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, error: 'Missing phone number or message body' });
   }
 
+  if (!client || (!messagingServiceSid && !fromNumber)) {
+    return res.status(500).json({ success: false, error: 'SMS service is not configured' });
+  }
+
+  const normalizedPhone = String(to).replace(/[^\d+]/g, '');
+  const normalizedBody = String(body).trim();
+
+  if (!PHONE_PATTERN.test(normalizedPhone)) {
+    return res.status(400).json({ success: false, error: 'Invalid phone number format' });
+  }
+
+  if (!normalizedBody || normalizedBody.length > MAX_MESSAGE_LENGTH) {
+    return res.status(400).json({ success: false, error: 'Message body must be between 1 and 320 characters' });
+  }
+
   try {
     const messageConfig = {
-      to: to,
-      body: body,
+      to: normalizedPhone,
+      body: normalizedBody,
     };
 
     // Use Messaging Service SID if available (highly recommended for A2P compliance)
@@ -38,7 +55,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, sid: message.sid });
   } catch (error) {
     console.error('Twilio Server Error:', error);
-    // Return the specific Twilio error message to the dashboard
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: 'SMS delivery failed' });
   }
 }
