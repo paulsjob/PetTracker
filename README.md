@@ -17,6 +17,8 @@ Follow these steps to enable multi-device synchronization for the pilot.
 - Click **Run**. This will create the `doctors` and `patients` tables and insert demo accounts.
 - Create a second query and run `supabase_clinic_settings.sql` to create shared clinic footer settings storage used by the admin Settings panel.
 - Create a third query and run `supabase_audit_logs.sql` to provision the audit trail table used for admin/staff activity logging.
+- For production hardening, run `supabase_rls_policies.sql` to enable Row Level Security (RLS) and clinic/admin-aware authorization policies.
+- Optional but recommended: run `supabase_rls_smoke_test.sql` to validate that unauthorized writes are denied.
 
 ### 3. Configure Environment Variables
 The app automatically looks for Supabase credentials. Ensure your environment provides:
@@ -40,5 +42,17 @@ npm run dev
 - **Multi-device Sync**: Open the staff dashboard on two different devices or browser tabs. Changes made on one should appear on the other within 10 seconds.
 - **Client View**: Use the "Link" button on a patient card to open the client tracker. Verify updates reflect in real-time.
 
-### 6. Security Note
-This pilot uses a simplified authentication model for rapid deployment. Row Level Security (RLS) is not enabled in the provided schema. Ensure you use a non-sensitive project and clinic ID for testing.
+### 6. Security Modes
+
+#### Pilot Mode (quick setup)
+- Fastest path for demos and internal testing.
+- Uses simplified auth assumptions; do **not** use sensitive production data in this mode.
+
+#### Production Mode (required for real deployments)
+- Run all schema files **plus** `supabase_rls_policies.sql`.
+- Ensure staff sessions use authenticated Supabase JWTs with claims: `clinic_id`, `doctor_id`, and `is_admin`.
+- Keep RLS enabled on `patients`, `doctors`, `clinic_settings`, and `audit_logs`.
+- Use `supabase_rls_smoke_test.sql` as a quick regression check whenever policies are updated.
+
+### 7. Security Note
+RLS policy enforcement should be treated as the primary authorization boundary. Client-side checks and audit logging are still valuable, but they are not a substitute for database-enforced permissions.
