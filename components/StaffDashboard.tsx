@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { logAuditEvent } from '../services/auditLog';
 import { supabase } from '../services/supabase';
 import { Patient, Doctor, StageId } from '../types';
 import { STAGES, CLINIC_ID } from '../constants';
@@ -122,12 +123,34 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     await action();
   };
 
+  const auditDoctorAction = async (
+    action: string,
+    targetType?: string,
+    targetId?: string,
+    metadata?: Record<string, unknown>,
+  ) => {
+    await logAuditEvent({
+      actorDoctorId: doctor.id,
+      action,
+      clinicId: CLINIC_ID,
+      targetType: targetType || null,
+      targetId: targetId || null,
+      metadata: metadata || null,
+    });
+  };
+
   const handleStatusUpdate = async (patientId: string, newStage: StageId) => {
     if (updatingIds[patientId]) return;
     setUpdatingIds(prev => ({ ...prev, [patientId]: true }));
     try {
       await api.updateStage(patientId, newStage, doctor.id);
       await loadData({ silent: true });
+      const patient = patients.find((entry) => entry.id === patientId);
+      await auditDoctorAction('patient.stage_updated', 'patient', patientId, {
+        doctorName: doctor.name,
+        patientName: patient?.name || null,
+        newStage,
+      });
     } catch (error) {
       showNotification("Update failed", "error");
     } finally {
@@ -148,7 +171,14 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         body: JSON.stringify({ to: phone, body: `[PetTracker] Update for ${patient.name}: Status is now ${stageLabel}. Track live: ${clientLink}` }),
       });
       const data = await response.json();
-      if (data.success) showNotification(`SMS sent to ${phone}`);
+      if (data.success) {
+        showNotification(`SMS sent to ${phone}`);
+        await auditDoctorAction('patient.sms_sent', 'patient', patient.id, {
+          patientName: patient.name,
+          phone,
+          stage: patient.stage,
+        });
+      }
       else showNotification(`Carrier Error: ${data.error}`, 'error');
     } catch (err) { showNotification('Connection error', 'error'); } 
     finally { setSendingSms(prev => ({ ...prev, [patient.id]: false })); }
@@ -173,6 +203,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
     showNotification(nextAdminValue ? 'Admin access granted' : 'Admin access removed');
     await loadData({ silent: true });
+    await auditDoctorAction(nextAdminValue ? 'staff.admin_granted' : 'staff.admin_removed', 'doctor', targetDoctor.id, {
+      targetDoctorName: targetDoctor.name,
+    });
   };
 
   const CopyableInfo = ({ label, value, fieldKey, customDisplay }: { label: string, value: string, fieldKey: string, customDisplay?: string }) => {
@@ -201,7 +234,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             </div>
             <div className="flex border-t border-slate-100">
               <button onClick={() => setDeleteTarget(null)} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 border-r border-slate-100">Cancel</button>
-              <button onClick={async () => runAdminAction(async () => { await supabase.from('doctors').delete().eq('id', deleteTarget.id); setDeleteTarget(null); loadData(); showNotification("User Deleted"); })} className="flex-1 px-6 py-4 text-sm font-bold text-red-600 hover:bg-red-50">Delete</button>
+              <button onClick={async () => runAdminAction(async () => {
+                await supabase.from('doctors').delete().eq('id', deleteTarget.id);
+                await auditDoctorAction('staff.deleted', 'doctor', deleteTarget.id, {
+                  targetDoctorName: deleteTarget.name,
+                });
+                setDeleteTarget(null);
+                loadData();
+                showNotification("User Deleted");
+              })} className="flex-1 px-6 py-4 text-sm font-bold text-red-600 hover:bg-red-50">Delete</button>
             </div>
           </div>
         </div>
@@ -217,7 +258,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             </div>
             <div className="flex border-t border-slate-100">
               <button onClick={() => setDischargeTarget(null)} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 border-r border-slate-100">Cancel</button>
-              <button onClick={async () => { await supabase.from('patients').update({ status: 'discharged', updated_at: new Date().toISOString() }).eq('id', dischargeTarget.id); setDischargeTarget(null); loadData(); showNotification('Discharged'); }} className="flex-1 px-6 py-4 text-sm font-bold text-orange-600 hover:bg-orange-50">Discharge</button>
+              <button onClick={async () => {
+                await supabase.from('patients').update({ status: 'discharged', updated_at: new Date().toISOString() }).eq('id', dischargeTarget.id);
+                await auditDoctorAction('patient.discharged', 'patient', dischargeTarget.id, {
+                  patientName: dischargeTarget.name,
+                });
+                setDischargeTarget(null);
+                loadData();
+                showNotification('Discharged');
+              }} className="flex-1 px-6 py-4 text-sm font-bold text-orange-600 hover:bg-orange-50">Discharge</button>
             </div>
           </div>
         </div>
@@ -246,6 +295,9 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                   const result = await saveClinicContactSettings(clinicContactForm, CLINIC_ID);
                   showNotification(result.source === 'remote' ? 'Contact footer updated for the clinic' : 'Contact footer saved locally');
                   setClinicContactForm(result.settings);
+                  await auditDoctorAction('clinic.contact_settings_updated', 'clinic_settings', CLINIC_ID, {
+                    source: result.source,
+                  });
                   setIsSettingsOpen(false);
                 });
               }}
@@ -319,7 +371,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                await runAdminAction(async () => {
                  const id = `doc-${Math.random().toString(36).substring(2, 8)}`;
                  const { error } = await supabase.from('doctors').insert([{ ...newStaff, name: newStaff.name.trim(), id, clinic_id: CLINIC_ID, is_active: true, is_admin: false }]);
-                 if (!error) { setNewStaff({ ...newStaff, name: '', pin: '' }); loadData(); showNotification("User Added"); }
+                 if (!error) {
+                   await auditDoctorAction('staff.created', 'doctor', id, {
+                     targetDoctorName: newStaff.name.trim(),
+                     specialty: newStaff.specialty,
+                   });
+                   setNewStaff({ ...newStaff, name: '', pin: '' });
+                   loadData();
+                   showNotification("User Added");
+                 }
                  else { showNotification('Unable to add staff member', 'error'); }
                });
             }} className="space-y-5">
@@ -348,7 +408,13 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                              <button onClick={() => runAdminAction(() => toggleDoctorAdmin(doc))} className={`px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wide transition-all ${doc.is_admin ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'}`}>
                                {doc.is_admin ? 'Remove Admin' : 'Make Admin'}
                              </button>
-                             <button onClick={() => runAdminAction(() => supabase.from('doctors').update({ is_active: !doc.is_active }).eq('id', doc.id).then(() => loadData()))} className={`p-3 rounded-2xl transition-all ${doc.is_active ? 'text-slate-300 hover:text-amber-600 hover:bg-amber-50' : 'text-emerald-500 bg-emerald-50'}`}>{doc.is_active ? <UserMinus size={22}/> : <CheckCircle size={22}/>}</button>
+                             <button onClick={() => runAdminAction(async () => {
+                               await supabase.from('doctors').update({ is_active: !doc.is_active }).eq('id', doc.id);
+                               await auditDoctorAction(doc.is_active ? 'staff.deactivated' : 'staff.reactivated', 'doctor', doc.id, {
+                                 targetDoctorName: doc.name,
+                               });
+                               await loadData();
+                             })} className={`p-3 rounded-2xl transition-all ${doc.is_active ? 'text-slate-300 hover:text-amber-600 hover:bg-amber-50' : 'text-emerald-500 bg-emerald-50'}`}>{doc.is_active ? <UserMinus size={22}/> : <CheckCircle size={22}/>}</button>
                              {!doc.is_admin && <button onClick={() => setDeleteTarget(doc)} className="p-3 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"><Trash2 size={22}/></button>}
                           </div>
                         </td>
@@ -369,7 +435,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             const id = Math.random().toString(36).substring(2, 14);
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             const { error } = await supabase.from('patients').insert([{ ...newPatient, id, clinic_id: CLINIC_ID, doctor_id: doctor.id, stage: 'checked-in', status: 'active', access_code: code, stage_history: [] }]);
-            if (!error) { setNewPatient({ name: '', owner: '', owner_phone: '' }); loadData(); showNotification("Checked in!"); }
+            if (!error) {
+              await auditDoctorAction('patient.created', 'patient', id, {
+                patientName: newPatient.name,
+                ownerName: newPatient.owner,
+              });
+              setNewPatient({ name: '', owner: '', owner_phone: '' });
+              loadData();
+              showNotification("Checked in!");
+            }
           }} className="grid grid-cols-1 md:grid-cols-12 gap-6">
             <div className="md:col-span-3"><input type="text" value={newPatient.name} onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Pet Name" /></div>
             <div className="md:col-span-3"><input type="text" value={newPatient.owner} onChange={(e) => setNewPatient({ ...newPatient, owner: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Owner Name" /></div>
