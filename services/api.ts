@@ -1,17 +1,35 @@
+import { AuthError, Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { Patient, Doctor, StageId, PatientStageEvent } from '../types';
 import { CLINIC_ID } from '../constants';
 
 export const api = {
-  login: async (pin: string, clinicId: string = CLINIC_ID): Promise<Doctor | null> => {
+  signInStaff: async (email: string, password: string): Promise<{ session: Session | null; error: AuthError | null }> => {
+    if (!supabase) return { session: null, error: null };
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    return { session: data.session, error };
+  },
+
+  signOutStaff: async (): Promise<void> => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+  },
+
+  getCurrentStaffProfile: async (userId: string, clinicId: string = CLINIC_ID): Promise<Doctor | null> => {
     if (!supabase) return null;
     const { data, error } = await supabase
       .from('doctors')
       .select('*')
       .eq('clinic_id', clinicId)
-      .eq('pin', pin)
+      .eq('user_id', userId)
       .eq('is_active', true)
       .maybeSingle();
+
     if (error) return null;
     return data as Doctor | null;
   },
@@ -28,9 +46,7 @@ export const api = {
     return data as Patient | null;
   },
 
-  getPatientForClient: async (id: string, code: string): Promise<Patient | null> => {
-    return api.loginPatientWithId(id, code);
-  },
+  getPatientForClient: async (id: string, code: string): Promise<Patient | null> => api.loginPatientWithId(id, code),
 
   updateStage: async (id: string, stage: StageId, doctorId: string, note?: string): Promise<void> => {
     if (!supabase) return;
@@ -38,21 +54,24 @@ export const api = {
     const { data: current } = await supabase.from('patients').select('stage, stage_history').eq('id', id).single();
     let history = (current?.stage_history || []) as PatientStageEvent[];
     if (current?.stage !== stage) {
-      const event = { 
-        from_stage: current?.stage, 
-        to_stage: stage, 
-        changed_at: new Date().toISOString(), 
-        changed_by_doctor_id: doctorId 
+      const event = {
+        from_stage: current?.stage,
+        to_stage: stage,
+        changed_at: new Date().toISOString(),
+        changed_by_doctor_id: doctorId,
       };
       history = [event, ...history].slice(0, 10);
     }
-    await supabase.from('patients').update({ 
-      stage, 
-      note: cleanNote, 
-      updated_at: new Date().toISOString(), 
-      updated_by_doctor_id: doctorId, 
-      stage_history: history 
-    }).eq('id', id);
+    await supabase
+      .from('patients')
+      .update({
+        stage,
+        note: cleanNote,
+        updated_at: new Date().toISOString(),
+        updated_by_doctor_id: doctorId,
+        stage_history: history,
+      })
+      .eq('id', id);
     window.dispatchEvent(new CustomEvent('vettrack:update', { detail: { id } }));
-  }
+  },
 };

@@ -46,7 +46,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const [dischargeTarget, setDischargeTarget] = useState<Patient | null>(null);
   
   const [newPatient, setNewPatient] = useState({ name: '', owner: '', owner_phone: '' });
-  const [newStaff, setNewStaff] = useState({ name: '', specialty: 'Internal Medicine', pin: '' });
+  const [newStaff, setNewStaff] = useState({ name: '', specialty: 'Internal Medicine', email: '' });
   const [clinicContactForm, setClinicContactForm] = useState<ClinicContactSettings>(getClinicContactSettings());
   
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
@@ -130,7 +130,6 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     metadata?: Record<string, unknown>,
   ) => {
     await logAuditEvent({
-      actorDoctorId: doctor.id,
       action,
       clinicId: CLINIC_ID,
       targetType: targetType || null,
@@ -363,20 +362,20 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                  showNotification('Provider name is required', 'error');
                  return;
                }
-               if (newStaff.pin.length !== 4) {
-                 showNotification('PIN must be 4 digits', 'error');
+               if (!newStaff.email.trim()) {
+                 showNotification('Staff email is required', 'error');
                  return;
                }
 
                await runAdminAction(async () => {
                  const id = `doc-${Math.random().toString(36).substring(2, 8)}`;
-                 const { error } = await supabase.from('doctors').insert([{ ...newStaff, name: newStaff.name.trim(), id, clinic_id: CLINIC_ID, is_active: true, is_admin: false }]);
+                 const { error } = await supabase.from('doctors').insert([{ ...newStaff, email: newStaff.email.trim().toLowerCase(), name: newStaff.name.trim(), id, clinic_id: CLINIC_ID, is_active: true, is_admin: false }]);
                  if (!error) {
                    await auditDoctorAction('staff.created', 'doctor', id, {
                      targetDoctorName: newStaff.name.trim(),
                      specialty: newStaff.specialty,
                    });
-                   setNewStaff({ ...newStaff, name: '', pin: '' });
+                   setNewStaff({ ...newStaff, name: '', email: '' });
                    loadData();
                    showNotification("User Added");
                  }
@@ -387,7 +386,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
               <select value={newStaff.specialty} onChange={(e) => setNewStaff({...newStaff, specialty: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold text-slate-700 outline-none">
                   {specialties.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
-              <input type="text" maxLength={4} value={newStaff.pin} onChange={(e) => setNewStaff({...newStaff, pin: e.target.value.replace(/\D/g,'')})} placeholder="PIN (4 Digits)" className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-bold tracking-[0.2em] outline-none" />
+              <input type="email" value={newStaff.email} onChange={(e) => setNewStaff({...newStaff, email: e.target.value})} placeholder="Staff Email" className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-amber-500" />
               <button type="submit" className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg rounded-2xl shadow-lg transition-all">Add Staff Member</button>
             </form>
           </div>
@@ -402,7 +401,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                            <div className="font-bold text-slate-800 text-lg">{doc.name} {doc.is_admin && <span className="ml-2 text-xs text-amber-500 font-bold bg-amber-50 px-2 py-0.5 rounded">ADMIN</span>}</div>
                            <div className="text-sm text-slate-500 font-medium">{doc.specialty}</div>
                         </td>
-                        <td className="py-5 font-mono text-slate-500 font-bold tracking-widest">{doc.pin}</td>
+                        <td className="py-5 text-slate-500 text-sm font-medium">{doc.email || 'No email set'}</td>
                         <td className="py-5 text-right">
                           <div className="flex justify-end gap-3">
                              <button onClick={() => runAdminAction(() => toggleDoctorAdmin(doc))} className={`px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wide transition-all ${doc.is_admin ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'}`}>

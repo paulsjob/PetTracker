@@ -26,11 +26,10 @@ export interface Patient {
 
 export interface Doctor {
   id: string;
+  user_id?: string | null;
   name: string;
   specialty: string;
-  pin: string;
   clinic_id?: string;
-  // NEW FIELDS TO FIX BUILD ERRORS
   is_admin: boolean;
   is_active: boolean;
   email?: string | null;
