@@ -15,9 +15,10 @@ Follow these steps to enable multi-device synchronization for the pilot.
 - Open the **SQL Editor** in your Supabase dashboard.
 - Create a new query and paste the contents of `supabase_schema.sql`.
 - Click **Run**. This will create the `doctors` and `patients` tables and insert demo accounts.
-- Create a second query and run `supabase_clinic_settings.sql` to create shared clinic footer settings storage used by the admin Settings panel.
-- Create a third query and run `supabase_audit_logs.sql` to provision the audit trail table used for admin/staff activity logging.
-- For production hardening, run `supabase_rls_policies.sql` to enable Row Level Security (RLS) and clinic/admin-aware authorization policies.
+- Create a second query and run `supabase_staff_auth_migration.sql` to add `doctors.user_id`, `doctors.app_role`, and the secure `user_roles` table for Supabase Auth role mapping.
+- Create a third query and run `supabase_clinic_settings.sql` to create shared clinic footer settings storage used by the admin Settings panel.
+- Create a fourth query and run `supabase_audit_logs.sql` to provision the audit trail table used for admin/staff activity logging (`actor_user_id` is tied to `auth.uid()`).
+- For production hardening, run `supabase_rls_policies.sql` to enable Row Level Security (RLS) with database-side role checks.
 - Optional but recommended: run `supabase_rls_smoke_test.sql` to validate that unauthorized writes are denied.
 
 ### 3. Configure Environment Variables
@@ -38,7 +39,7 @@ npm run dev
 ```
 
 ### 5. Pilot Sanity Checks
-- **Staff Login**: Try logging in with PIN `1111`. If it works, the app is successfully validating against Supabase (or falling back to local demo data).
+- **Staff Login**: Sign in through Supabase Auth with a staff email/password account that is mapped to a `doctors.user_id`.
 - **Multi-device Sync**: Open the staff dashboard on two different devices or browser tabs. Changes made on one should appear on the other within 10 seconds.
 - **Client View**: Use the "Link" button on a patient card to open the client tracker. Verify updates reflect in real-time.
 
@@ -50,7 +51,7 @@ npm run dev
 
 #### Production Mode (required for real deployments)
 - Run all schema files **plus** `supabase_rls_policies.sql`.
-- Ensure staff sessions use authenticated Supabase JWTs with claims: `clinic_id`, `doctor_id`, and `is_admin`.
+- Ensure staff users authenticate through Supabase Auth and are mapped to `doctors.user_id` + `user_roles`.
 - Keep RLS enabled on `patients`, `doctors`, `clinic_settings`, and `audit_logs`.
 - Use `supabase_rls_smoke_test.sql` as a quick regression check whenever policies are updated.
 
