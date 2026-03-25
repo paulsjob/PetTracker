@@ -11,6 +11,7 @@ export interface Patient {
   id: string;
   name: string;
   owner: string;
+  owner_contact?: string | null;
   owner_phone?: string | null;
   stage: StageId;
   status: 'active' | 'discharged';

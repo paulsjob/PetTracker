@@ -41,11 +41,11 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
   // INTERACTION & SYNC LOCKS
   const [updatingIds, setUpdatingIds] = useState<Record<string, boolean>>({});
-  const [sendingSms, setSendingSms] = useState<Record<string, boolean>>({});
+  const [sendingLink, setSendingLink] = useState<Record<string, boolean>>({});
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [dischargeTarget, setDischargeTarget] = useState<Patient | null>(null);
   
-  const [newPatient, setNewPatient] = useState({ name: '', owner: '', owner_phone: '' });
+  const [newPatient, setNewPatient] = useState({ name: '', owner: '', owner_contact: '' });
   const [newStaff, setNewStaff] = useState({ name: '', specialty: 'Internal Medicine', email: '' });
   const [clinicContactForm, setClinicContactForm] = useState<ClinicContactSettings>(getClinicContactSettings());
   
@@ -169,30 +169,23 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     }
   };
 
-  const handleSendSMS = async (patient: Patient) => {
-    const phone = patient.owner_phone;
-    if (!phone) { showNotification("No phone number saved", "error"); return; }
-    setSendingSms(prev => ({ ...prev, [patient.id]: true }));
-    const stageLabel = STAGES.find(s => s.id === patient.stage)?.label || 'Checked In';
-    const clientLink = `${window.location.origin}/?id=${patient.id}&code=${patient.access_code}`;
+  const handleSendLink = async (patient: Patient) => {
+    const ownerContact = patient.owner_contact || patient.owner_phone;
+    if (!ownerContact) { showNotification("No owner contact saved", "error"); return; }
+    setSendingLink(prev => ({ ...prev, [patient.id]: true }));
     try {
-      const response = await fetch('/api/send-sms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: phone, body: `[PetTracker] Update for ${patient.name}: Status is now ${stageLabel}. Track live: ${clientLink}` }),
-      });
-      const data = await response.json();
+      const data = await api.notifyParent(patient.id, 'check-in-link');
       if (data.success) {
-        showNotification(`SMS sent to ${phone}`);
-        await auditDoctorAction('patient.sms_sent', 'patient', patient.id, {
+        showNotification(`Link sent to ${ownerContact}`);
+        await auditDoctorAction('patient.link_sent', 'patient', patient.id, {
           patientName: patient.name,
-          phone,
-          stage: patient.stage,
+          ownerContact,
+          template: 'check-in-link',
         });
       }
-      else showNotification(`Carrier Error: ${data.error}`, 'error');
-    } catch (err) { showNotification('Connection error', 'error'); } 
-    finally { setSendingSms(prev => ({ ...prev, [patient.id]: false })); }
+      else showNotification(`Notification Error: ${data.error}`, 'error');
+    } catch (err) { showNotification('Connection error', 'error'); }
+    finally { setSendingLink(prev => ({ ...prev, [patient.id]: false })); }
   };
 
   const toggleDoctorAdmin = async (targetDoctor: Doctor) => {
@@ -460,20 +453,33 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             e.preventDefault();
             const id = Math.random().toString(36).substring(2, 14);
             const code = Math.floor(100000 + Math.random() * 900000).toString();
-            const { error } = await supabase.from('patients').insert([{ ...newPatient, id, clinic_id: CLINIC_ID, doctor_id: doctor.id, stage: 'checked-in', status: 'active', access_code: code, stage_history: [] }]);
+            const ownerContact = newPatient.owner_contact.trim();
+            const { error } = await supabase.from('patients').insert([{
+              ...newPatient,
+              owner_contact: ownerContact || null,
+              owner_phone: ownerContact.includes('@') ? null : ownerContact || null,
+              id,
+              clinic_id: CLINIC_ID,
+              doctor_id: doctor.id,
+              stage: 'checked-in',
+              status: 'active',
+              access_code: code,
+              stage_history: [],
+            }]);
             if (!error) {
               await auditDoctorAction('patient.created', 'patient', id, {
                 patientName: newPatient.name,
                 ownerName: newPatient.owner,
               });
-              setNewPatient({ name: '', owner: '', owner_phone: '' });
+              await api.notifyParent(id, 'check-in-link');
+              setNewPatient({ name: '', owner: '', owner_contact: '' });
               loadData();
               showNotification("Checked in!");
             }
           }} className="grid grid-cols-1 md:grid-cols-12 gap-6">
             <div className="md:col-span-3"><input type="text" value={newPatient.name} onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Pet Name" /></div>
             <div className="md:col-span-3"><input type="text" value={newPatient.owner} onChange={(e) => setNewPatient({ ...newPatient, owner: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Owner Name" /></div>
-            <div className="md:col-span-3"><input type="tel" value={newPatient.owner_phone} onChange={(e) => setNewPatient({ ...newPatient, owner_phone: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="+1 (704) 555-0123" /></div>
+            <div className="md:col-span-3"><input type="text" value={newPatient.owner_contact} onChange={(e) => setNewPatient({ ...newPatient, owner_contact: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Owner Phone or Email" /></div>
             <div className="md:col-span-3"><button type="submit" className="w-full bg-indigo-600 text-white font-bold text-lg py-4 rounded-2xl shadow-lg transition-all hover:bg-indigo-700">Check In</button></div>
           </form>
       </div>
@@ -517,7 +523,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                   </div>
                   <div className="flex flex-wrap gap-3">
                     <a href={clientLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-8 py-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-sm font-bold border border-slate-100 transition-all font-sans"><Eye size={20}/> Preview</a>
-                    {viewMode === 'active' && <button onClick={() => handleSendSMS(patient)} disabled={sendingSms[patient.id]} className="flex items-center gap-2 px-8 py-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-sm font-bold border border-slate-100 transition-all font-sans">{sendingSms[patient.id] ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>} Update</button>}
+                    {viewMode === 'active' && <button onClick={() => handleSendLink(patient)} disabled={sendingLink[patient.id]} className="flex items-center gap-2 px-8 py-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-sm font-bold border border-slate-100 transition-all font-sans">{sendingLink[patient.id] ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>} Send Link</button>}
                     <button onClick={() => setAdvancedOpen(prev => ({ ...prev, [patient.id]: !prev[patient.id] }))} className="flex items-center gap-2 px-8 py-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-sm font-bold border border-slate-100 transition-all font-sans">Advanced {advancedOpen[patient.id] ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}</button>
                   </div>
                 </div>
