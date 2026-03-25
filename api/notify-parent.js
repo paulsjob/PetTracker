@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
+import twilio from 'twilio';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -12,11 +13,16 @@ const supabaseAdmin = supabaseUrl && serviceRoleKey
 
 const CHANNEL_BY_CONTACT = {
   email: 'resend',
-  sms: 'twilio-mock',
+  sms: 'twilio',
 };
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_PATTERN = /^\+?[1-9]\d{9,14}$/;
+
 const normalizeContact = (value) => String(value || '').trim();
-const isEmail = (value) => value.includes('@');
+const normalizePhone = (value) => String(value || '').replace(/[^\d+]/g, '');
+const isEmail = (value) => EMAIL_PATTERN.test(normalizeContact(value));
+const isPhone = (value) => PHONE_PATTERN.test(normalizePhone(value));
 
 const buildTrackingUrl = (baseUrl, patientId, accessCode) =>
   `${baseUrl.replace(/\/$/, '')}/?id=${encodeURIComponent(patientId)}&code=${encodeURIComponent(accessCode)}`;
@@ -27,6 +33,7 @@ const createNotificationPayload = ({ template, patient, trackingUrl, clinicName 
       subject: 'Pickup Ready',
       body: `Great news! ${patient.name} is ready for pickup.`,
       html: createReadyForPickupEmail({ clinicName, petName: patient.name, trackingUrl }),
+      sms: `PetTracker: ${patient.name} ready at ${clinicName}. Track: ${trackingUrl}`,
     };
   }
 
@@ -34,6 +41,7 @@ const createNotificationPayload = ({ template, patient, trackingUrl, clinicName 
     subject: 'Live Tracking Link',
     body: `${patient.name} is checked in! Track their status live: ${trackingUrl}`,
     html: createCheckInEmail({ clinicName, petName: patient.name, trackingUrl }),
+    sms: `PetTracker: ${patient.name} checked in at ${clinicName}. Track: ${trackingUrl}`,
   };
 };
 
@@ -114,6 +122,11 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Patient has no owner contact on file' });
   }
 
+  const channel = isEmail(ownerContact) ? 'email' : isPhone(ownerContact) ? 'sms' : null;
+  if (!channel) {
+    return res.status(400).json({ error: 'Owner contact must be a valid email address or phone number' });
+  }
+
   const baseUrl = process.env.PUBLIC_APP_URL
     || `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}`;
   const trackingUrl = buildTrackingUrl(baseUrl, patient.id, patient.access_code);
@@ -124,33 +137,93 @@ export default async function handler(req, res) {
     .maybeSingle();
   const clinicName = clinicSettings?.name || 'PetTracker';
   const payload = createNotificationPayload({ template, patient, trackingUrl, clinicName });
-  const channel = isEmail(ownerContact) ? 'email' : 'sms';
   const provider = CHANNEL_BY_CONTACT[channel];
-  const resendApiKey = process.env.RESEND_API_KEY;
 
-  if (channel === 'email' && resendApiKey) {
+  if (channel === 'email') {
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (resendApiKey) {
+      try {
+        const resend = new Resend(resendApiKey);
+        const result = await resend.emails.send({
+          from: process.env.RESEND_FROM_EMAIL || 'PetTracker <notifications@pettracker.local>',
+          to: ownerContact,
+          subject: payload.subject,
+          html: payload.html,
+          text: payload.body,
+        });
+
+        return res.status(200).json({
+          success: true,
+          provider,
+          channel,
+          to: ownerContact,
+          message: payload.body,
+          delivery: result,
+        });
+      } catch (sendError) {
+        console.error('[notify-parent:resend-error]', {
+          patientId: patient.id,
+          to: ownerContact,
+          template,
+          error: sendError,
+        });
+
+        return res.status(200).json({
+          success: true,
+          provider,
+          channel,
+          to: ownerContact,
+          message: payload.body,
+          warning: 'Email delivery failed. Check logs for details.',
+        });
+      }
+    }
+
+    console.log('[notify-parent:mock-provider]', {
+      provider: 'resend-mock',
+      channel,
+      to: ownerContact,
+      patientId: patient.id,
+      template,
+      message: payload.body,
+    });
+
+    return res.status(200).json({
+      success: true,
+      provider: 'resend-mock',
+      channel,
+      to: ownerContact,
+      message: payload.body,
+    });
+  }
+
+  const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
+  const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+  const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
+  const normalizedPhone = normalizePhone(ownerContact);
+
+  if (twilioAccountSid && twilioAuthToken && twilioPhoneNumber) {
+    const twilioClient = twilio(twilioAccountSid, twilioAuthToken);
+
     try {
-      const resend = new Resend(resendApiKey);
-      const result = await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || 'PetTracker <notifications@pettracker.local>',
-        to: ownerContact,
-        subject: payload.subject,
-        html: payload.html,
-        text: payload.body,
+      const result = await twilioClient.messages.create({
+        from: twilioPhoneNumber,
+        to: normalizedPhone,
+        body: payload.sms,
       });
 
       return res.status(200).json({
         success: true,
         provider,
         channel,
-        to: ownerContact,
-        message: payload.body,
-        delivery: result,
+        to: normalizedPhone,
+        message: payload.sms,
+        delivery: { sid: result.sid },
       });
     } catch (sendError) {
-      console.error('[notify-parent:resend-error]', {
+      console.error('[notify-parent:twilio-error]', {
         patientId: patient.id,
-        to: ownerContact,
+        to: normalizedPhone,
         template,
         error: sendError,
       });
@@ -159,27 +232,27 @@ export default async function handler(req, res) {
         success: true,
         provider,
         channel,
-        to: ownerContact,
-        message: payload.body,
-        warning: 'Email delivery failed. Check logs for details.',
+        to: normalizedPhone,
+        message: payload.sms,
+        warning: 'SMS delivery failed. Check logs for details.',
       });
     }
   }
 
   console.log('[notify-parent:mock-provider]', {
-    provider: channel === 'email' ? 'resend-mock' : provider,
+    provider: 'twilio-mock',
     channel,
-    to: ownerContact,
+    to: normalizedPhone,
     patientId: patient.id,
     template,
-    message: payload.body,
+    message: payload.sms,
   });
 
   return res.status(200).json({
     success: true,
-    provider: channel === 'email' ? 'resend-mock' : provider,
+    provider: 'twilio-mock',
     channel,
-    to: ownerContact,
-    message: payload.body,
+    to: normalizedPhone,
+    message: payload.sms,
   });
 }
