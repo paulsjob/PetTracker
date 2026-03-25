@@ -17,6 +17,8 @@ export interface Patient {
   clinic_id: string;
   doctor_id: string;
   access_code: string;
+  access_code_expires_at?: string | null;
+  discharged_at?: string | null;
   created_at: string;
   updated_at?: string;
   updated_by_doctor_id?: string;

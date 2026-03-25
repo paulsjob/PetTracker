@@ -119,4 +119,12 @@ export const api = {
       .eq('id', id);
     window.dispatchEvent(new CustomEvent('vettrack:update', { detail: { id } }));
   },
+
+  dischargePatient: async (id: string): Promise<void> => {
+    if (!supabase) return;
+    const { error } = await supabase.rpc('discharge_patient_with_grace', {
+      discharge_patient_id: id,
+    });
+    if (error) throw error;
+  },
 };

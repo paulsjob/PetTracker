@@ -15,6 +15,10 @@ as $$
   from public.patients p
   where p.id = lookup_patient_id
     and p.access_code = lookup_access_code
+    and (
+      p.status <> 'discharged'
+      or (p.access_code_expires_at is not null and now() <= p.access_code_expires_at)
+    )
   limit 1;
 $$;
 

@@ -21,8 +21,11 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [connectionBanner, setConnectionBanner] = useState<string | null>(null);
   const [clinicContact, setClinicContact] = useState(getClinicContactSettings(CLINIC_ID));
   const fetchingRef = useRef(false);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const isRealtimeClosedForDischarge = patient?.status === 'discharged';
 
   const fetchStatus = async () => {
     if (fetchingRef.current) return;
@@ -38,33 +41,76 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
 
   useEffect(() => {
     fetchStatus();
+    if (isRealtimeClosedForDischarge) return;
     const intervalId = window.setInterval(fetchStatus, 15000);
     return () => window.clearInterval(intervalId);
-  }, [patientId]);
+  }, [patientId, accessCode, isRealtimeClosedForDischarge]);
 
   useEffect(() => {
     if (!supabase || !patientId || !accessCode) return;
+    if (isRealtimeClosedForDischarge) {
+      setConnectionBanner(null);
+      return;
+    }
 
-    const channel = supabase
-      .channel(`parent-patient-${patientId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'patients',
-          filter: `id=eq.${patientId},access_code=eq.${accessCode}`,
-        },
-        () => {
-          void fetchStatus();
-        },
-      )
-      .subscribe();
+    let isActive = true;
+    let currentChannel: ReturnType<typeof supabase.channel> | null = null;
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimerRef.current) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
+
+    const subscribeToUpdates = () => {
+      if (!isActive) return;
+      clearReconnectTimer();
+
+      currentChannel = supabase
+        .channel(`parent-patient-${patientId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'patients',
+            filter: `id=eq.${patientId},access_code=eq.${accessCode}`,
+          },
+          () => {
+            void fetchStatus();
+          },
+        )
+        .subscribe((status) => {
+          if (!isActive) return;
+          if (status === 'SUBSCRIBED') {
+            setConnectionBanner(null);
+            return;
+          }
+
+          if (status === 'TIMED_OUT' || status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+            setConnectionBanner('Connection lost. Trying to reconnect…');
+            clearReconnectTimer();
+            reconnectTimerRef.current = window.setTimeout(async () => {
+              if (!isActive) return;
+              if (currentChannel) {
+                await supabase.removeChannel(currentChannel);
+                currentChannel = null;
+              }
+              subscribeToUpdates();
+            }, 2000);
+          }
+        });
+    };
+
+    subscribeToUpdates();
 
     return () => {
-      void supabase.removeChannel(channel);
+      isActive = false;
+      clearReconnectTimer();
+      if (currentChannel) void supabase.removeChannel(currentChannel);
     };
-  }, [patientId, accessCode]);
+  }, [patientId, accessCode, isRealtimeClosedForDischarge]);
 
   useEffect(() => {
     let isMounted = true;
@@ -104,6 +150,18 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
 
   return (
     <div className="max-w-4xl mx-auto">
+      {connectionBanner && (
+        <div className="mb-4 rounded-xl border-2 border-red-300 bg-red-50 px-4 py-3 text-sm font-bold text-red-800 shadow-sm">
+          {connectionBanner}
+        </div>
+      )}
+
+      {isDischarged && (
+        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+          {patient.name} has been discharged and is safely at home. Live updates are intentionally paused for this archived visit.
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-8">
         <div className="bg-indigo-600 p-6 text-white flex justify-between items-start">
           <div>
