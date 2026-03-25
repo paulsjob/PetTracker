@@ -207,6 +207,7 @@ create policy doctors_admin_delete
 -- CLINIC SETTINGS
 alter table public.clinic_settings enable row level security;
 drop policy if exists clinic_settings_select_same_clinic_active_staff on public.clinic_settings;
+drop policy if exists clinic_settings_select_anon on public.clinic_settings;
 drop policy if exists clinic_settings_admin_write on public.clinic_settings;
 
 create policy clinic_settings_select_same_clinic_active_staff
@@ -216,6 +217,12 @@ create policy clinic_settings_select_same_clinic_active_staff
     public.current_staff_is_active()
     and clinic_id = public.current_staff_clinic_id()
   );
+
+create policy clinic_settings_select_anon
+  on public.clinic_settings
+  for select
+  to anon
+  using (true);
 
 create policy clinic_settings_admin_write
   on public.clinic_settings

@@ -2,8 +2,9 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Patient } from '../types';
 import { STAGES, CLINIC_CONFIG, CLINIC_ID } from '../constants';
 import { api } from '../services/api';
-import { RefreshCw, CheckCircle, Phone, Calendar, MessageCircle, Mail, Clock } from 'lucide-react';
+import { RefreshCw, CheckCircle, Phone, Mail, Clock, PawPrint } from 'lucide-react';
 import {
+  DEFAULT_CLINIC_BRAND_COLOR,
   clinicContactUpdateEvent,
   getClinicContactSettings,
   loadClinicContactSettings,
@@ -147,6 +148,8 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
   const isDischarged = patient.status === 'discharged';
   const currentStageIndex = STAGES.findIndex(s => s.id === patient.stage);
   const currentStageConfig = STAGES[currentStageIndex];
+  const brandColor = /^#[0-9A-F]{6}$/i.test(clinicContact.brandColor) ? clinicContact.brandColor : DEFAULT_CLINIC_BRAND_COLOR;
+  const hasLogo = !!clinicContact.logoUrl;
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -163,21 +166,24 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
       )}
 
       <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-8">
-        <div className="bg-indigo-600 p-6 text-white flex justify-between items-start">
+        <div className="p-6 text-white flex justify-between items-start" style={{ backgroundColor: brandColor }}>
           <div>
             <h1 className="text-3xl font-bold">{patient.name}</h1>
             <div className="flex items-center gap-2 mt-1">
-              <span className="bg-indigo-500 px-3 py-1 rounded-full text-sm font-medium">{patient.owner}'s Pet</span>
+              <span className="px-3 py-1 rounded-full text-sm font-medium bg-white/20">{patient.owner}'s Pet</span>
             </div>
           </div>
           <button onClick={onLogout} className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg text-sm font-medium">Logout</button>
         </div>
         
         <div className="p-12 text-center">
-          <div className={`inline-flex p-6 rounded-full mb-6 shadow-lg scale-110 ${isDischarged ? 'bg-emerald-500 text-white' : `${currentStageConfig?.color} text-white`}`}>
+          <div
+            className={`inline-flex p-6 rounded-full mb-6 shadow-lg scale-110 text-white ${isDischarged ? 'bg-emerald-500' : ''}`}
+            style={!isDischarged ? { backgroundColor: brandColor } : undefined}
+          >
             {isDischarged ? <CheckCircle size={56} strokeWidth={1.5} /> : <currentStageConfig.icon size={56} strokeWidth={1.5} />}
           </div>
-          <h2 className={`text-4xl font-extrabold mb-3 ${isDischarged ? 'text-emerald-600' : currentStageConfig?.textColor}`}>
+          <h2 className={`text-4xl font-extrabold mb-3 ${isDischarged ? 'text-emerald-600' : ''}`} style={!isDischarged ? { color: brandColor } : undefined}>
             {isDischarged ? 'Officially Discharged' : currentStageConfig?.label}
           </h2>
           <p className="text-xl text-gray-600 max-w-lg mx-auto leading-relaxed italic">
@@ -192,9 +198,18 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
       </div>
 
       <div className="text-center text-gray-500 text-sm py-4">
+        <div className="mb-4 flex justify-center">
+          {hasLogo ? (
+            <img src={clinicContact.logoUrl} alt={`${clinicContact.name || CLINIC_CONFIG.name} logo`} className="h-14 w-14 rounded-xl border border-slate-200 bg-white object-contain p-1" />
+          ) : (
+            <div className="h-14 w-14 rounded-xl border border-indigo-100 bg-indigo-50 flex items-center justify-center">
+              <PawPrint className="text-indigo-600" size={24} />
+            </div>
+          )}
+        </div>
         <p className="mb-3">Need assistance? Contact {clinicContact.name || CLINIC_CONFIG.name}.</p>
         <div className="flex flex-col gap-2 items-center">
-          <div className="flex items-center justify-center gap-2 font-medium text-indigo-600">
+          <div className="flex items-center justify-center gap-2 font-medium" style={{ color: brandColor }}>
             <Phone size={14} /> {clinicContact.phone || CLINIC_CONFIG.phone}
           </div>
           {!!clinicContact.email && (
