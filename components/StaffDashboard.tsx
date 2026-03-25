@@ -270,13 +270,17 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             <div className="flex border-t border-slate-100">
               <button onClick={() => setDischargeTarget(null)} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 border-r border-slate-100">Cancel</button>
               <button onClick={async () => {
-                await supabase.from('patients').update({ status: 'discharged', updated_at: new Date().toISOString() }).eq('id', dischargeTarget.id);
-                await auditDoctorAction('patient.discharged', 'patient', dischargeTarget.id, {
-                  patientName: dischargeTarget.name,
-                });
-                setDischargeTarget(null);
-                loadData();
-                showNotification('Discharged');
+                try {
+                  await api.dischargePatient(dischargeTarget.id);
+                  await auditDoctorAction('patient.discharged', 'patient', dischargeTarget.id, {
+                    patientName: dischargeTarget.name,
+                  });
+                  setDischargeTarget(null);
+                  loadData();
+                  showNotification('Discharged');
+                } catch (error) {
+                  showNotification('Discharge failed', 'error');
+                }
               }} className="flex-1 px-6 py-4 text-sm font-bold text-orange-600 hover:bg-orange-50">Discharge</button>
             </div>
           </div>

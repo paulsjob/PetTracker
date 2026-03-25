@@ -21,6 +21,7 @@ Follow these steps to enable multi-device synchronization for the pilot.
 - For production hardening, run `supabase_rls_policies.sql` to enable Row Level Security (RLS) with database-side role checks.
 - Optional but recommended: run `supabase_rls_smoke_test.sql` to validate that unauthorized writes are denied.
 - Run `supabase_patient_lookup_rpc.sql` so pet parents can still lookup status by System ID + Access Code after anon table access is revoked.
+- Run `supabase_discharge_lifecycle.sql` to enforce the discharge grace-period lifecycle and secure discharge RPC.
 
 ### 3. Configure Environment Variables
 The app automatically looks for Supabase credentials. Ensure your environment provides:
