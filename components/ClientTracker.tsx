@@ -9,6 +9,7 @@ import {
   loadClinicContactSettings,
   subscribeToClinicContactSettings,
 } from '../services/clinicSettings';
+import { supabase } from '../services/supabase';
 
 interface ClientTrackerProps {
   patientId: string;
@@ -40,6 +41,30 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
     const intervalId = window.setInterval(fetchStatus, 15000);
     return () => window.clearInterval(intervalId);
   }, [patientId]);
+
+  useEffect(() => {
+    if (!supabase || !patientId || !accessCode) return;
+
+    const channel = supabase
+      .channel(`parent-patient-${patientId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'patients',
+          filter: `id=eq.${patientId},access_code=eq.${accessCode}`,
+        },
+        () => {
+          void fetchStatus();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [patientId, accessCode]);
 
   useEffect(() => {
     let isMounted = true;

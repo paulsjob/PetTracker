@@ -76,7 +76,19 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
   useEffect(() => {
     loadData();
-    const channel = supabase?.channel('dashboard-live').on('postgres_changes', { event: '*', schema: 'public', table: 'patients' }, () => loadData({ silent: true })).subscribe();
+    const channel = supabase
+      ?.channel(`dashboard-live-${doctor.id}-${viewMode}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'patients',
+          filter: `clinic_id=eq.${CLINIC_ID},status=eq.${viewMode}`,
+        },
+        () => loadData({ silent: true }),
+      )
+      .subscribe();
     return () => { if (channel) supabase?.removeChannel(channel); };
   }, [doctor.id, viewMode, isAdminPortal, adminDoctorFilter]);
 

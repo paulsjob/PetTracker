@@ -114,6 +114,17 @@ create policy patients_select_same_clinic_active_staff
     and clinic_id = public.current_staff_clinic_id()
   );
 
+drop policy if exists patients_parent_realtime_select_by_id_and_access_code on public.patients;
+create policy patients_parent_realtime_select_by_id_and_access_code
+  on public.patients
+  for select
+  to anon
+  using (
+    auth.role() = 'anon'
+    and id = coalesce((current_setting('request.jwt.claims', true))::json ->> 'patient_id', '')
+    and access_code = coalesce((current_setting('request.jwt.claims', true))::json ->> 'access_code', '')
+  );
+
 create policy patients_insert_same_clinic_active_staff
   on public.patients
   for insert
@@ -248,3 +259,5 @@ revoke all on table public.doctors from anon;
 revoke all on table public.clinic_settings from anon;
 revoke all on table public.audit_logs from anon;
 revoke all on table public.user_roles from anon;
+
+grant select on table public.patients to anon;
