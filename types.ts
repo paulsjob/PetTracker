@@ -35,4 +35,4 @@ export interface Doctor {
   email?: string | null;
 }
 
-export type ViewState = 'landing' | 'staff-login' | 'patient-login' | 'staff-dashboard' | 'client-tracker';
+export type ViewState = 'landing' | 'staff-login' | 'staff-reset' | 'patient-login' | 'staff-dashboard' | 'client-tracker';

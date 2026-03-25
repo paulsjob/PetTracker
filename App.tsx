@@ -24,6 +24,9 @@ export default function App() {
   const [accessCode, setAccessCode] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [confirmResetPassword, setConfirmResetPassword] = useState('');
+  const [isSendingReset, setIsSendingReset] = useState(false);
   const [error, setError] = useState('');
   const [staffLockoutMessage, setStaffLockoutMessage] = useState('');
   const [patientLockoutMessage, setPatientLockoutMessage] = useState('');
@@ -41,6 +44,11 @@ export default function App() {
       setPrefilledId(patientId);
       if (code) setAccessCode(code);
       setView('patient-login');
+      return;
+    }
+
+    if (params.get('view') === 'reset-password') {
+      setView('staff-reset');
     }
   }, []);
 
@@ -132,6 +140,68 @@ export default function App() {
       }
     } catch {
       setError('Login failed. Check your connection.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+
+  const handleForgotPassword = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError('Enter your staff email first, then click Forgot password.');
+      return;
+    }
+
+    setIsSendingReset(true);
+    setError('');
+
+    try {
+      const redirectTo = `${window.location.origin}/?view=reset-password`;
+      const { error: resetError } = await api.requestStaffPasswordReset(normalizedEmail, redirectTo);
+      if (resetError) {
+        setError(resetError.message);
+      } else {
+        setError('Password reset email sent. Check your inbox for the secure link.');
+      }
+    } catch {
+      setError('Unable to send reset email. Please try again.');
+    } finally {
+      setIsSendingReset(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!resetPassword || resetPassword.length < 8) {
+      setError('Use a password with at least 8 characters.');
+      return;
+    }
+
+    if (resetPassword !== confirmResetPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setIsLoggingIn(true);
+    setError('');
+
+    try {
+      const { error: updateError } = await api.updateStaffPassword(resetPassword);
+      if (updateError) {
+        setError(updateError.message);
+        return;
+      }
+
+      await api.signOutStaff();
+      setResetPassword('');
+      setConfirmResetPassword('');
+      setPassword('');
+      setView('staff-login');
+      setError('Password updated. Please sign in with your new password.');
+    } catch {
+      setError('Could not update password. Open the reset link again and retry.');
     } finally {
       setIsLoggingIn(false);
     }
@@ -268,6 +338,15 @@ export default function App() {
                   />
                 </div>
 
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={isSendingReset || isLoggingIn || !email}
+                  className="w-full text-sm font-semibold text-indigo-600 hover:text-indigo-700 disabled:text-slate-400 transition-colors"
+                >
+                  {isSendingReset ? 'Sending reset email...' : 'Forgot password?'}
+                </button>
+
                 {staffLockoutMessage && <div className="text-amber-600 text-center text-sm font-semibold">{staffLockoutMessage}</div>}
                 {error && <div className="text-red-500 text-center text-sm font-medium">{error}</div>}
 
@@ -278,6 +357,71 @@ export default function App() {
                 >
                   {isLoggingIn ? 'Signing in...' : 'Access Dashboard'}
                   {!isLoggingIn && <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />}
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+
+
+      case 'staff-reset':
+        return (
+          <div className="max-w-md mx-auto mt-10 relative">
+            <div className="flex justify-between items-center mb-6">
+              <button
+                onClick={() => setView('staff-login')}
+                className="text-gray-500 hover:text-gray-800 flex items-center gap-1 text-sm font-medium transition-colors"
+              >
+                ← Back to Staff Login
+              </button>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <KeyRound className="text-indigo-600" size={32} />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-800">Reset Password</h2>
+                <p className="text-gray-500 mt-2">Set a new password for your staff account.</p>
+              </div>
+
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                  <input
+                    type="password"
+                    value={resetPassword}
+                    onChange={(e) => setResetPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border rounded-xl outline-none transition-all bg-white text-gray-900 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                    placeholder="New password"
+                    autoFocus
+                    disabled={isLoggingIn}
+                    required
+                    minLength={8}
+                  />
+                </div>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                  <input
+                    type="password"
+                    value={confirmResetPassword}
+                    onChange={(e) => setConfirmResetPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border rounded-xl outline-none transition-all bg-white text-gray-900 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                    placeholder="Confirm new password"
+                    disabled={isLoggingIn}
+                    required
+                    minLength={8}
+                  />
+                </div>
+
+                {error && <div className="text-red-500 text-center text-sm font-medium">{error}</div>}
+
+                <button
+                  type="submit"
+                  disabled={isLoggingIn || !resetPassword || !confirmResetPassword}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all"
+                >
+                  {isLoggingIn ? 'Updating password...' : 'Save New Password'}
                 </button>
               </form>
             </div>
