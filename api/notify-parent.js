@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { Resend } from 'resend';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -10,7 +11,7 @@ const supabaseAdmin = supabaseUrl && serviceRoleKey
   : null;
 
 const CHANNEL_BY_CONTACT = {
-  email: 'resend-mock',
+  email: 'resend',
   sms: 'twilio-mock',
 };
 
@@ -20,19 +21,69 @@ const isEmail = (value) => value.includes('@');
 const buildTrackingUrl = (baseUrl, patientId, accessCode) =>
   `${baseUrl.replace(/\/$/, '')}/?id=${encodeURIComponent(patientId)}&code=${encodeURIComponent(accessCode)}`;
 
-const createNotificationPayload = ({ template, patient, trackingUrl }) => {
+const createNotificationPayload = ({ template, patient, trackingUrl, clinicName }) => {
   if (template === 'ready-for-pickup') {
     return {
       subject: 'Pickup Ready',
-      body: 'Great news! Your pet is ready for pickup.',
+      body: `Great news! ${patient.name} is ready for pickup.`,
+      html: createReadyForPickupEmail({ clinicName, petName: patient.name, trackingUrl }),
     };
   }
 
   return {
     subject: 'Live Tracking Link',
-    body: `Your pet is checked in! Track their status live: ${trackingUrl}`,
+    body: `${patient.name} is checked in! Track their status live: ${trackingUrl}`,
+    html: createCheckInEmail({ clinicName, petName: patient.name, trackingUrl }),
   };
 };
+
+const brandStyles = {
+  purple: '#6D28D9',
+  purpleDark: '#5B21B6',
+  text: '#111827',
+  muted: '#4B5563',
+  background: '#F5F3FF',
+  card: '#FFFFFF',
+};
+
+const createHtmlShell = ({ title, subtitle, ctaLabel, trackingUrl }) => `
+  <div style="margin:0;padding:24px;background:${brandStyles.background};font-family:Inter,Segoe UI,Arial,sans-serif;color:${brandStyles.text};">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;margin:0 auto;">
+      <tr>
+        <td style="background:${brandStyles.card};border-radius:16px;padding:32px;border:1px solid #E9D5FF;">
+          <div style="display:inline-block;background:#EDE9FE;color:${brandStyles.purpleDark};font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:6px 10px;border-radius:999px;">
+            PetTracker Update
+          </div>
+          <h1 style="margin:18px 0 8px;font-size:24px;line-height:1.3;color:${brandStyles.purpleDark};">${title}</h1>
+          <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:${brandStyles.muted};">${subtitle}</p>
+          <a href="${trackingUrl}" style="display:inline-block;background:${brandStyles.purple};color:#FFFFFF;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:10px;">
+            ${ctaLabel}
+          </a>
+          <p style="margin:24px 0 0;font-size:13px;color:${brandStyles.muted};line-height:1.6;">
+            If the button does not work, use this secure tracking link:<br />
+            <a href="${trackingUrl}" style="color:${brandStyles.purple};word-break:break-all;">${trackingUrl}</a>
+          </p>
+        </td>
+      </tr>
+    </table>
+  </div>
+`;
+
+const createCheckInEmail = ({ clinicName, petName, trackingUrl }) =>
+  createHtmlShell({
+    title: `${petName} is checked in at ${clinicName}`,
+    subtitle: `We’ve started your pet’s visit. You can follow each step in real time with the secure tracker.`,
+    ctaLabel: 'Track Visit Status',
+    trackingUrl,
+  });
+
+const createReadyForPickupEmail = ({ clinicName, petName, trackingUrl }) =>
+  createHtmlShell({
+    title: `${petName} is ready for pickup`,
+    subtitle: `${clinicName} has completed today’s visit. View final status updates before you head over.`,
+    ctaLabel: 'View Final Updates',
+    trackingUrl,
+  });
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -50,7 +101,7 @@ export default async function handler(req, res) {
 
   const { data: patient, error } = await supabaseAdmin
     .from('patients')
-    .select('id, name, owner, owner_contact, owner_phone, access_code')
+    .select('id, name, owner, owner_contact, owner_phone, access_code, clinic_id')
     .eq('id', patientId)
     .maybeSingle();
 
@@ -66,12 +117,57 @@ export default async function handler(req, res) {
   const baseUrl = process.env.PUBLIC_APP_URL
     || `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}`;
   const trackingUrl = buildTrackingUrl(baseUrl, patient.id, patient.access_code);
-  const payload = createNotificationPayload({ template, patient, trackingUrl });
+  const { data: clinicSettings } = await supabaseAdmin
+    .from('clinic_settings')
+    .select('name')
+    .eq('clinic_id', patient.clinic_id || 'default')
+    .maybeSingle();
+  const clinicName = clinicSettings?.name || 'PetTracker';
+  const payload = createNotificationPayload({ template, patient, trackingUrl, clinicName });
   const channel = isEmail(ownerContact) ? 'email' : 'sms';
   const provider = CHANNEL_BY_CONTACT[channel];
+  const resendApiKey = process.env.RESEND_API_KEY;
+
+  if (channel === 'email' && resendApiKey) {
+    try {
+      const resend = new Resend(resendApiKey);
+      const result = await resend.emails.send({
+        from: process.env.RESEND_FROM_EMAIL || 'PetTracker <notifications@pettracker.local>',
+        to: ownerContact,
+        subject: payload.subject,
+        html: payload.html,
+        text: payload.body,
+      });
+
+      return res.status(200).json({
+        success: true,
+        provider,
+        channel,
+        to: ownerContact,
+        message: payload.body,
+        delivery: result,
+      });
+    } catch (sendError) {
+      console.error('[notify-parent:resend-error]', {
+        patientId: patient.id,
+        to: ownerContact,
+        template,
+        error: sendError,
+      });
+
+      return res.status(200).json({
+        success: true,
+        provider,
+        channel,
+        to: ownerContact,
+        message: payload.body,
+        warning: 'Email delivery failed. Check logs for details.',
+      });
+    }
+  }
 
   console.log('[notify-parent:mock-provider]', {
-    provider,
+    provider: channel === 'email' ? 'resend-mock' : provider,
     channel,
     to: ownerContact,
     patientId: patient.id,
@@ -81,7 +177,7 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     success: true,
-    provider,
+    provider: channel === 'email' ? 'resend-mock' : provider,
     channel,
     to: ownerContact,
     message: payload.body,
