@@ -4,8 +4,10 @@ import { supabase } from './supabase';
 export interface ClinicContactSettings {
   name: string;
   phone: string;
+  supportPhoneNumber: string;
   hours: string;
   email: string;
+  enableSmsNotifications: boolean;
 }
 
 const STORAGE_PREFIX = 'pettracker:clinic-contact-settings';
@@ -15,17 +17,21 @@ const CLINIC_SETTINGS_TABLE = 'clinic_settings';
 const DEFAULT_SETTINGS: ClinicContactSettings = {
   name: CLINIC_CONFIG.name,
   phone: CLINIC_CONFIG.phone,
+  supportPhoneNumber: CLINIC_CONFIG.phone,
   hours: CLINIC_CONFIG.hours,
   email: CLINIC_CONFIG.email,
+  enableSmsNotifications: true,
 };
 
 const getStorageKey = (clinicId: string) => `${STORAGE_PREFIX}:${clinicId}`;
 
 const normalizeClinicContactSettings = (settings?: Partial<ClinicContactSettings>): ClinicContactSettings => ({
   name: settings?.name?.trim() || DEFAULT_SETTINGS.name,
-  phone: settings?.phone?.trim() || DEFAULT_SETTINGS.phone,
+  phone: settings?.supportPhoneNumber?.trim() || settings?.phone?.trim() || DEFAULT_SETTINGS.phone,
+  supportPhoneNumber: settings?.supportPhoneNumber?.trim() || settings?.phone?.trim() || DEFAULT_SETTINGS.supportPhoneNumber,
   hours: settings?.hours?.trim() || DEFAULT_SETTINGS.hours,
   email: settings?.email?.trim() || DEFAULT_SETTINGS.email,
+  enableSmsNotifications: settings?.enableSmsNotifications ?? DEFAULT_SETTINGS.enableSmsNotifications,
 });
 
 const readLocalSettings = (clinicId: string): ClinicContactSettings => {
@@ -61,13 +67,16 @@ export const loadClinicContactSettings = async (clinicId: string = CLINIC_ID): P
   try {
     const { data, error } = await supabase
       .from(CLINIC_SETTINGS_TABLE)
-      .select('name, phone, hours, email')
+      .select('name, phone, hours, email, support_phone_number, enable_sms_notifications')
       .eq('clinic_id', clinicId)
       .maybeSingle();
 
     if (error || !data) return readLocalSettings(clinicId);
-
-    return writeLocalSettings(clinicId, normalizeClinicContactSettings(data));
+    return writeLocalSettings(clinicId, normalizeClinicContactSettings({
+      ...data,
+      supportPhoneNumber: data.support_phone_number ?? data.phone,
+      enableSmsNotifications: data.enable_sms_notifications,
+    }));
   } catch {
     return readLocalSettings(clinicId);
   }
@@ -90,7 +99,12 @@ export const saveClinicContactSettings = async (
       .upsert(
         {
           clinic_id: clinicId,
-          ...normalized,
+          name: normalized.name,
+          phone: normalized.supportPhoneNumber,
+          support_phone_number: normalized.supportPhoneNumber,
+          hours: normalized.hours,
+          email: normalized.email,
+          enable_sms_notifications: normalized.enableSmsNotifications,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'clinic_id' },
