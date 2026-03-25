@@ -12,10 +12,11 @@ import {
   subscribeToClinicContactSettings,
   uploadClinicLogo,
 } from '../services/clinicSettings';
+import { downloadJsonAsCsv } from '../services/csvExport';
 import { 
   LogOut, Dog, Stethoscope, History, ChevronDown, ChevronUp, 
   Send, Loader2, User, Eye, Archive, Copy, Check, AlertTriangle, 
-  CheckCircle, ShieldCheck, Users, UserPlus, UserMinus, Trash2, Phone, ClipboardList
+  CheckCircle, ShieldCheck, Users, UserPlus, UserMinus, Trash2, Phone, ClipboardList, Download
 } from 'lucide-react';
 
 const QUICK_NOTES = ["Doing well", "Vitals stable", "In progress", "Waking up", "Ready soon", "Call pending"];
@@ -36,14 +37,23 @@ interface AuditLogRow {
 }
 
 export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor }) => {
+  const HISTORY_WINDOWS = [
+    { value: 'all', label: 'All Time', days: null },
+    { value: '7', label: 'Last 7 Days', days: 7 },
+    { value: '30', label: 'Last 30 Days', days: 30 },
+    { value: '90', label: 'Last 90 Days', days: 90 },
+  ] as const;
+
   // CORE STATE
   const [patients, setPatients] = useState<Patient[]>([]);
   const [allDoctors, setAllDoctors] = useState<Doctor[]>([]);
-  const [viewMode, setViewMode] = useState<'active' | 'discharged'>('active');
+  const [viewMode, setViewMode] = useState<'active' | 'discharged' | 'history'>('active');
   const [isAdminPortal, setIsAdminPortal] = useState(false);
   const [hasAdminRole, setHasAdminRole] = useState(false);
   const [adminTab, setAdminTab] = useState<'staff' | 'settings' | 'audit'>('staff');
   const [adminDoctorFilter, setAdminDoctorFilter] = useState<string>('all');
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyDateRange, setHistoryDateRange] = useState<(typeof HISTORY_WINDOWS)[number]['value']>('30');
   
   // SPECIALTY & STAFF MANAGEMENT
   const [specialties, setSpecialties] = useState<string[]>(["Internal Medicine", "Surgery", "Oncology", "Neurology", "ER & Critical Care", "Cardiology", "Dermatology"]);
@@ -71,13 +81,39 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const loadData = async (options?: { silent?: boolean }) => {
     try {
       if (!supabase) return;
-      
-      const { data: pData } = await supabase
+
+      const nowIso = new Date().toISOString();
+      const fallbackGraceCutoff = new Date(Date.now() - (24 * 60 * 60 * 1000)).toISOString();
+      let patientQuery = supabase
         .from('patients')
         .select('*')
-        .eq('clinic_id', CLINIC_ID)
-        .eq('status', viewMode)
-        .order('name', { ascending: true });
+        .eq('clinic_id', CLINIC_ID);
+
+      if (viewMode === 'history') {
+        patientQuery = patientQuery
+          .eq('status', 'discharged')
+          .or(`access_code_expires_at.lte.${nowIso},and(access_code_expires_at.is.null,discharged_at.lte.${fallbackGraceCutoff})`)
+          .order('discharged_at', { ascending: false });
+
+        if (historySearch.trim()) {
+          const escapedTerm = historySearch.trim().replace(/[%_]/g, '');
+          patientQuery = patientQuery.or(
+            `name.ilike.%${escapedTerm}%,owner.ilike.%${escapedTerm}%,owner_contact.ilike.%${escapedTerm}%,owner_phone.ilike.%${escapedTerm}%`,
+          );
+        }
+
+        const selectedWindow = HISTORY_WINDOWS.find((window) => window.value === historyDateRange);
+        if (selectedWindow?.days) {
+          const dateCutoff = new Date(Date.now() - (selectedWindow.days * 24 * 60 * 60 * 1000)).toISOString();
+          patientQuery = patientQuery.gte('discharged_at', dateCutoff);
+        }
+      } else {
+        patientQuery = patientQuery
+          .eq('status', viewMode)
+          .order('name', { ascending: true });
+      }
+
+      const { data: pData } = await patientQuery;
       
       let filtered = pData || [];
       if (!isAdminPortal) { filtered = filtered.filter((p: Patient) => p.doctor_id === doctor.id); }
@@ -99,13 +135,13 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
           event: '*',
           schema: 'public',
           table: 'patients',
-          filter: `clinic_id=eq.${CLINIC_ID},status=eq.${viewMode}`,
+          filter: `clinic_id=eq.${CLINIC_ID},status=eq.${viewMode === 'history' ? 'discharged' : viewMode}`,
         },
         () => loadData({ silent: true }),
       )
       .subscribe();
     return () => { if (channel) supabase?.removeChannel(channel); };
-  }, [doctor.id, viewMode, isAdminPortal, adminDoctorFilter]);
+  }, [doctor.id, viewMode, isAdminPortal, adminDoctorFilter, historySearch, historyDateRange]);
 
   useEffect(() => {
     let isMounted = true;
@@ -255,6 +291,48 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     if (!isAdminPortal || adminTab !== 'audit' || !hasAdminRole) return;
     void loadAuditLogs();
   }, [isAdminPortal, adminTab, hasAdminRole]);
+
+  const exportHistoryToCsv = () => {
+    if (patients.length === 0) {
+      showNotification('No archived patients available for export', 'error');
+      return;
+    }
+
+    downloadJsonAsCsv(
+      patients.map((patient) => ({
+        patient_id: patient.id,
+        pet_name: patient.name,
+        owner_name: patient.owner,
+        owner_contact: patient.owner_contact || patient.owner_phone || '',
+        assigned_doctor: allDoctors.find((doc) => doc.id === patient.doctor_id)?.name || '',
+        discharged_at: patient.discharged_at || '',
+        last_stage: patient.stage,
+        note: patient.note || '',
+      })),
+      `patient-history-${new Date().toISOString().slice(0, 10)}.csv`,
+    );
+  };
+
+  const exportAuditLogsToCsv = () => {
+    if (auditLogs.length === 0) {
+      showNotification('No audit logs available for export', 'error');
+      return;
+    }
+
+    downloadJsonAsCsv(
+      auditLogs.map((entry) => {
+        const actor = allDoctors.find((doc) => doc.user_id === entry.actor_user_id || doc.id === entry.actor_doctor_id);
+        return {
+          timestamp: entry.created_at,
+          actor: actor?.email || actor?.name || entry.actor_user_id || 'System',
+          action: entry.action,
+          target_patient: entry.target_id ? (auditPatientLookup[entry.target_id] || '') : '',
+          target_id: entry.target_id || '',
+        };
+      }),
+      `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`,
+    );
+  };
 
   const handleStatusUpdate = async (patientId: string, newStage: StageId) => {
     if (updatingIds[patientId]) return;
@@ -593,7 +671,12 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-bold text-slate-400 flex items-center gap-2 uppercase tracking-wide"><ClipboardList size={20}/> Audit Logs</h2>
-                <button onClick={() => void loadAuditLogs()} className="text-sm font-bold text-indigo-600 hover:text-indigo-800">Refresh</button>
+                <div className="flex items-center gap-3">
+                  <button onClick={exportAuditLogsToCsv} className="inline-flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-emerald-700 hover:bg-emerald-100">
+                    <Download size={14} /> Export to CSV
+                  </button>
+                  <button onClick={() => void loadAuditLogs()} className="text-sm font-bold text-indigo-600 hover:text-indigo-800">Refresh</button>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
@@ -634,7 +717,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       )}
 
       {/* 4. CHECK-IN FORM */}
-      <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-10 mb-8">
+      {viewMode !== 'history' && (
+        <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-10 mb-8">
           <h2 className="text-sm font-bold mb-6 uppercase tracking-widest text-slate-400 px-1">Check In New Patient</h2>
           <form onSubmit={async (e) => {
             e.preventDefault();
@@ -669,13 +753,15 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             <div className="md:col-span-3"><input type="text" value={newPatient.owner_contact} onChange={(e) => setNewPatient({ ...newPatient, owner_contact: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Owner Phone or Email" /></div>
             <div className="md:col-span-3"><button type="submit" className="w-full bg-indigo-600 text-white font-bold text-lg py-4 rounded-2xl shadow-lg transition-all hover:bg-indigo-700">Check In</button></div>
           </form>
-      </div>
+        </div>
+      )}
 
       {/* 5. NAVIGATION TABS */}
       <div className="mb-8 px-2 flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex gap-4 bg-slate-200/50 p-2 rounded-2xl border border-slate-100 shadow-sm">
           <button onClick={() => setViewMode('active')} className={`px-12 py-3 rounded-xl text-base font-bold transition-all ${viewMode === 'active' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-900'}`}>Active Patients</button>
           <button onClick={() => setViewMode('discharged')} className={`px-12 py-3 rounded-xl text-base font-bold transition-all ${viewMode === 'discharged' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-900'}`}>Discharged</button>
+          <button onClick={() => setViewMode('history')} className={`px-12 py-3 rounded-xl text-base font-bold transition-all ${viewMode === 'history' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-900'}`}>History</button>
         </div>
         {isAdminPortal && hasAdminRole && (
           <div className="flex items-center gap-4 bg-white px-6 py-3 rounded-2xl border border-slate-100 shadow-sm">
@@ -688,8 +774,49 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         )}
       </div>
 
+      {viewMode === 'history' && (
+        <div className="mb-8 rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Search History</span>
+                <input
+                  type="text"
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  placeholder="Pet name, owner, phone, or email"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium outline-none focus:border-indigo-400"
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Discharge Date</span>
+                <select
+                  value={historyDateRange}
+                  onChange={(e) => setHistoryDateRange(e.target.value as (typeof HISTORY_WINDOWS)[number]['value'])}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-indigo-400"
+                >
+                  {HISTORY_WINDOWS.map((window) => (
+                    <option key={window.value} value={window.value}>{window.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <button onClick={exportHistoryToCsv} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700">
+              <Download size={16} /> Export to CSV
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 6. PATIENT LIST */}
       <div className="space-y-8">
+        {patients.length === 0 && (
+          <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-500">
+            {viewMode === 'history'
+              ? 'No archived patients match the selected filters.'
+              : 'No patients found for this view.'}
+          </div>
+        )}
         {patients.map(patient => {
           const assignedDoc = allDoctors.find(d => d.id === patient.doctor_id);
           const clientLink = `${window.location.origin}/?id=${patient.id}&code=${patient.access_code}`;
@@ -766,7 +893,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                   {STAGES.map((stage) => {
                     const isActive = patient.stage === stage.id;
                     return (
-                      <button key={stage.id} onClick={() => handleStatusUpdate(patient.id, stage.id as StageId)} disabled={viewMode === 'discharged' || isProcessing} className={`flex flex-col items-center justify-center p-6 rounded-[2rem] border-2 transition-all ${isActive && viewMode === 'active' ? `${stage.color} border-transparent text-white shadow-xl scale-[1.04]` : 'bg-white border-slate-100 text-slate-500 hover:text-slate-900 hover:bg-slate-50 shadow-sm'} ${viewMode === 'discharged' ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                      <button key={stage.id} onClick={() => handleStatusUpdate(patient.id, stage.id as StageId)} disabled={viewMode !== 'active' || isProcessing} className={`flex flex-col items-center justify-center p-6 rounded-[2rem] border-2 transition-all ${isActive && viewMode === 'active' ? `${stage.color} border-transparent text-white shadow-xl scale-[1.04]` : 'bg-white border-slate-100 text-slate-500 hover:text-slate-900 hover:bg-slate-50 shadow-sm'} ${viewMode !== 'active' ? 'opacity-40 cursor-not-allowed' : ''}`}>
                         <stage.icon size={28} className="mb-3" />
                         <span className="text-sm font-bold leading-tight text-center font-sans">{stage.label}</span>
                       </button>
