@@ -4,6 +4,24 @@ import { Patient, Doctor, StageId, PatientStageEvent } from '../types';
 import { CLINIC_ID } from '../constants';
 
 export const api = {
+  notifyParent: async (
+    patientId: string,
+    template: 'check-in-link' | 'ready-for-pickup',
+  ): Promise<{ success: boolean; provider?: string; channel?: string; message?: string; error?: string }> => {
+    const response = await fetch('/api/notify-parent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patientId, template }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      return { success: false, error: result?.error || 'Notification failed' };
+    }
+
+    return result;
+  },
+
   signInStaff: async (email: string, password: string): Promise<{ session: Session | null; error: AuthError | null }> => {
     if (!supabase) return { session: null, error: null };
 
@@ -97,6 +115,7 @@ export const api = {
     if (!supabase) return;
     const cleanNote = note?.trim() || null;
     const { data: current } = await supabase.from('patients').select('stage, stage_history').eq('id', id).single();
+    const shouldNotifyReady = current?.stage !== 'ready' && stage === 'ready';
     let history = (current?.stage_history || []) as PatientStageEvent[];
     if (current?.stage !== stage) {
       const event = {
@@ -117,6 +136,14 @@ export const api = {
         stage_history: history,
       })
       .eq('id', id);
+
+    if (shouldNotifyReady) {
+      const notifyResult = await api.notifyParent(id, 'ready-for-pickup');
+      if (!notifyResult.success) {
+        console.error('Ready notification failed:', notifyResult.error);
+      }
+    }
+
     window.dispatchEvent(new CustomEvent('vettrack:update', { detail: { id } }));
   },
 

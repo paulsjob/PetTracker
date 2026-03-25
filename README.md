@@ -18,6 +18,7 @@ Follow these steps to enable multi-device synchronization for the pilot.
 - Create a second query and run `supabase_staff_auth_migration.sql` to add `doctors.user_id`, `doctors.app_role`, and the secure `user_roles` table for Supabase Auth role mapping.
 - Create a third query and run `supabase_clinic_settings.sql` to create shared clinic footer settings storage used by the admin Settings panel.
 - Create a fourth query and run `supabase_audit_logs.sql` to provision the audit trail table used for admin/staff activity logging (`actor_user_id` is tied to `auth.uid()`).
+- Run `supabase_owner_contact_notifications.sql` to add the unified `patients.owner_contact` field used by owner link notifications.
 - For production hardening, run `supabase_rls_policies.sql` to enable Row Level Security (RLS) with database-side role checks.
 - Optional but recommended: run `supabase_rls_smoke_test.sql` to validate that unauthorized writes are denied.
 - Run `supabase_patient_lookup_rpc.sql` so pet parents can still lookup status by System ID + Access Code after anon table access is revoked.
