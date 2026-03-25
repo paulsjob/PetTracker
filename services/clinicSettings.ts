@@ -8,11 +8,15 @@ export interface ClinicContactSettings {
   hours: string;
   email: string;
   enableSmsNotifications: boolean;
+  brandColor: string;
+  logoUrl: string;
 }
 
 const STORAGE_PREFIX = 'pettracker:clinic-contact-settings';
 const UPDATE_EVENT = 'pettracker:clinic-contact-updated';
 const CLINIC_SETTINGS_TABLE = 'clinic_settings';
+const CLINIC_ASSETS_BUCKET = 'clinic_assets';
+const DEFAULT_BRAND_COLOR = '#4f46e5';
 
 const DEFAULT_SETTINGS: ClinicContactSettings = {
   name: CLINIC_CONFIG.name,
@@ -21,6 +25,8 @@ const DEFAULT_SETTINGS: ClinicContactSettings = {
   hours: CLINIC_CONFIG.hours,
   email: CLINIC_CONFIG.email,
   enableSmsNotifications: true,
+  brandColor: DEFAULT_BRAND_COLOR,
+  logoUrl: '',
 };
 
 const getStorageKey = (clinicId: string) => `${STORAGE_PREFIX}:${clinicId}`;
@@ -32,6 +38,8 @@ const normalizeClinicContactSettings = (settings?: Partial<ClinicContactSettings
   hours: settings?.hours?.trim() || DEFAULT_SETTINGS.hours,
   email: settings?.email?.trim() || DEFAULT_SETTINGS.email,
   enableSmsNotifications: settings?.enableSmsNotifications ?? DEFAULT_SETTINGS.enableSmsNotifications,
+  brandColor: /^#[0-9A-F]{6}$/i.test(settings?.brandColor || '') ? (settings?.brandColor as string) : DEFAULT_SETTINGS.brandColor,
+  logoUrl: settings?.logoUrl?.trim() || '',
 });
 
 const readLocalSettings = (clinicId: string): ClinicContactSettings => {
@@ -67,7 +75,7 @@ export const loadClinicContactSettings = async (clinicId: string = CLINIC_ID): P
   try {
     const { data, error } = await supabase
       .from(CLINIC_SETTINGS_TABLE)
-      .select('name, phone, hours, email, support_phone_number, enable_sms_notifications')
+      .select('name, phone, hours, email, support_phone_number, enable_sms_notifications, brand_color, logo_url')
       .eq('clinic_id', clinicId)
       .maybeSingle();
 
@@ -76,6 +84,8 @@ export const loadClinicContactSettings = async (clinicId: string = CLINIC_ID): P
       ...data,
       supportPhoneNumber: data.support_phone_number ?? data.phone,
       enableSmsNotifications: data.enable_sms_notifications,
+      brandColor: data.brand_color,
+      logoUrl: data.logo_url,
     }));
   } catch {
     return readLocalSettings(clinicId);
@@ -105,6 +115,8 @@ export const saveClinicContactSettings = async (
           hours: normalized.hours,
           email: normalized.email,
           enable_sms_notifications: normalized.enableSmsNotifications,
+          brand_color: normalized.brandColor,
+          logo_url: normalized.logoUrl || null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'clinic_id' },
@@ -118,6 +130,28 @@ export const saveClinicContactSettings = async (
     return { settings: normalized, source: 'local' };
   }
 };
+
+export const uploadClinicLogo = async (
+  file: File,
+  clinicId: string = CLINIC_ID,
+): Promise<{ publicUrl: string; path: string }> => {
+  if (!supabase) throw new Error('Supabase is not configured');
+
+  const extension = file.name.split('.').pop()?.toLowerCase() || 'png';
+  const sanitizedExtension = extension.replace(/[^a-z0-9]/g, '') || 'png';
+  const path = `${clinicId}/logo-${Date.now()}.${sanitizedExtension}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(CLINIC_ASSETS_BUCKET)
+    .upload(path, file, { cacheControl: '3600', upsert: true, contentType: file.type || undefined });
+
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage.from(CLINIC_ASSETS_BUCKET).getPublicUrl(path);
+  return { publicUrl: data.publicUrl, path };
+};
+
+export const DEFAULT_CLINIC_BRAND_COLOR = DEFAULT_BRAND_COLOR;
 
 export const subscribeToClinicContactSettings = (
   clinicId: string,

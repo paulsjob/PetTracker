@@ -10,6 +10,7 @@ import {
   loadClinicContactSettings,
   saveClinicContactSettings,
   subscribeToClinicContactSettings,
+  uploadClinicLogo,
 } from '../services/clinicSettings';
 import { 
   LogOut, Dog, Stethoscope, History, ChevronDown, ChevronUp, 
@@ -61,6 +62,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([]);
   const [auditPatientLookup, setAuditPatientLookup] = useState<Record<string, string>>({});
   const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
@@ -526,6 +528,54 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                 <div>
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Support Phone Number</label>
                   <input type="text" value={clinicContactForm.supportPhoneNumber} onChange={(e) => setClinicContactForm({ ...clinicContactForm, supportPhoneNumber: e.target.value, phone: e.target.value })} className="mt-1 w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Brand Color</label>
+                  <div className="mt-1 flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={clinicContactForm.brandColor}
+                      onChange={(e) => setClinicContactForm({ ...clinicContactForm, brandColor: e.target.value })}
+                      className="h-11 w-14 rounded-lg border border-slate-200 bg-slate-50 p-1"
+                    />
+                    <input
+                      type="text"
+                      value={clinicContactForm.brandColor}
+                      onChange={(e) => setClinicContactForm({ ...clinicContactForm, brandColor: e.target.value })}
+                      placeholder="#4f46e5"
+                      className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-mono uppercase"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Clinic Logo</label>
+                  <div className="mt-1 space-y-3">
+                    {clinicContactForm.logoUrl ? (
+                      <img src={clinicContactForm.logoUrl} alt="Clinic logo preview" className="h-16 w-16 rounded-xl border border-slate-200 object-contain bg-white p-1" />
+                    ) : null}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        void runAdminAction(async () => {
+                          setIsUploadingLogo(true);
+                          try {
+                            const { publicUrl } = await uploadClinicLogo(file, CLINIC_ID);
+                            setClinicContactForm((prev) => ({ ...prev, logoUrl: publicUrl }));
+                            showNotification('Logo uploaded');
+                          } catch {
+                            showNotification('Failed to upload logo', 'error');
+                          } finally {
+                            setIsUploadingLogo(false);
+                          }
+                        });
+                      }}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-100 file:px-3 file:py-2 file:text-xs file:font-bold file:text-indigo-700"
+                    />
+                    {isUploadingLogo && <p className="text-xs text-slate-500">Uploading logo…</p>}
+                  </div>
                 </div>
                 <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 cursor-pointer">
                   <span className="font-semibold text-slate-700">Enable SMS Notifications</span>
