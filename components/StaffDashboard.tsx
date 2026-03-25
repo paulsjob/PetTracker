@@ -368,18 +368,29 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                }
 
                await runAdminAction(async () => {
-                 const id = `doc-${Math.random().toString(36).substring(2, 8)}`;
-                 const { error } = await supabase.from('doctors').insert([{ ...newStaff, email: newStaff.email.trim().toLowerCase(), name: newStaff.name.trim(), id, clinic_id: CLINIC_ID, is_active: true, is_admin: false }]);
-                 if (!error) {
-                   await auditDoctorAction('staff.created', 'doctor', id, {
-                     targetDoctorName: newStaff.name.trim(),
-                     specialty: newStaff.specialty,
-                   });
-                   setNewStaff({ ...newStaff, name: '', email: '' });
-                   loadData();
-                   showNotification("User Added");
+                 const email = newStaff.email.trim().toLowerCase();
+                 const name = newStaff.name.trim();
+                 const inviteResult = await api.inviteStaffMember({
+                   name,
+                   specialty: newStaff.specialty,
+                   email,
+                   clinicId: CLINIC_ID,
+                 });
+
+                 if (inviteResult.error) {
+                   showNotification(inviteResult.error, 'error');
+                   return;
                  }
-                 else { showNotification('Unable to add staff member', 'error'); }
+
+                 await auditDoctorAction('staff.created', 'doctor', inviteResult.doctorId, {
+                   targetDoctorName: name,
+                   specialty: newStaff.specialty,
+                   invitedEmail: email,
+                 });
+
+                 setNewStaff({ ...newStaff, name: '', email: '' });
+                 await loadData();
+                 showNotification('Invite sent and staff profile linked');
                });
             }} className="space-y-5">
               <input type="text" value={newStaff.name} onChange={(e) => setNewStaff({...newStaff, name: e.target.value})} placeholder="Provider Full Name" className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-amber-500" />

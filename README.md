@@ -20,16 +20,19 @@ Follow these steps to enable multi-device synchronization for the pilot.
 - Create a fourth query and run `supabase_audit_logs.sql` to provision the audit trail table used for admin/staff activity logging (`actor_user_id` is tied to `auth.uid()`).
 - For production hardening, run `supabase_rls_policies.sql` to enable Row Level Security (RLS) with database-side role checks.
 - Optional but recommended: run `supabase_rls_smoke_test.sql` to validate that unauthorized writes are denied.
+- Run `supabase_patient_lookup_rpc.sql` so pet parents can still lookup status by System ID + Access Code after anon table access is revoked.
 
 ### 3. Configure Environment Variables
 The app automatically looks for Supabase credentials. Ensure your environment provides:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (server/API only; required for secure staff invites)
 
 If running locally with Vite, create a `.env.local` file:
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
 
 ### 4. Start the Application
@@ -57,3 +60,10 @@ npm run dev
 
 ### 7. Security Note
 RLS policy enforcement should be treated as the primary authorization boundary. Client-side checks and audit logging are still valuable, but they are not a substitute for database-enforced permissions.
+
+
+### Supabase Auth toggles for staff invites
+- In **Authentication > Providers > Email**, enable Email provider.
+- In **Authentication > URL Configuration**, set your Site URL and add the app URL to Redirect URLs (used for password reset links).
+- In **Authentication > Templates > Invite user**, customize invite email copy if desired.
+- Keep **Confirm email** enabled if you want invited users to verify ownership before first login.

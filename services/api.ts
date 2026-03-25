@@ -15,6 +15,51 @@ export const api = {
     return { session: data.session, error };
   },
 
+  requestStaffPasswordReset: async (email: string, redirectTo?: string): Promise<{ error: AuthError | null }> => {
+    if (!supabase) return { error: null };
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    });
+
+    return { error };
+  },
+
+  updateStaffPassword: async (password: string): Promise<{ error: AuthError | null }> => {
+    if (!supabase) return { error: null };
+
+    const { error } = await supabase.auth.updateUser({ password });
+    return { error };
+  },
+
+  inviteStaffMember: async (payload: { name: string; specialty: string; email: string; clinicId?: string }): Promise<{ error?: string; doctorId?: string }> => {
+    if (!supabase) return {};
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      return { error: 'Your admin session has expired. Please sign in again.' };
+    }
+
+    const response = await fetch('/api/invite-staff', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      return { error: result?.error || 'Unable to invite staff member.' };
+    }
+
+    return result;
+  },
+
   signOutStaff: async (): Promise<void> => {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -36,14 +81,14 @@ export const api = {
 
   loginPatientWithId: async (id: string, code: string): Promise<Patient | null> => {
     if (!supabase) return null;
-    const { data, error } = await supabase
-      .from('patients')
-      .select('*')
-      .eq('id', id)
-      .eq('access_code', code)
-      .maybeSingle();
-    if (error) return null;
-    return data as Patient | null;
+
+    const { data, error } = await supabase.rpc('lookup_patient_with_access_code', {
+      lookup_patient_id: id,
+      lookup_access_code: code,
+    });
+
+    if (error || !Array.isArray(data) || data.length === 0) return null;
+    return data[0] as Patient;
   },
 
   getPatientForClient: async (id: string, code: string): Promise<Patient | null> => api.loginPatientWithId(id, code),
