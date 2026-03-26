@@ -20,6 +20,14 @@ import {
 } from 'lucide-react';
 
 const QUICK_NOTES = ["Doing well", "Vitals stable", "In progress", "Waking up", "Ready soon", "Call pending"];
+const ACTIVE_STAGE_COLUMNS = [
+  { id: 'checked-in', patientStage: 'checked-in', title: 'Checked In', color: 'bg-blue-500' },
+  { id: 'doctor-eval', patientStage: 'doctor-eval', title: 'Doctor Eval', color: 'bg-purple-500' },
+  { id: 'pre-op', patientStage: 'pre-op', title: 'Pre-Op', color: 'bg-amber-500' },
+  { id: 'in-surgery', patientStage: 'surgery', title: 'In Surgery', color: 'bg-red-500' },
+  { id: 'recovery', patientStage: 'recovery', title: 'Recovery', color: 'bg-orange-500' },
+  { id: 'ready', patientStage: 'ready', title: 'Ready', color: 'bg-green-500' },
+] as const;
 
 interface StaffDashboardProps {
   onLogout: () => void;
@@ -368,6 +376,12 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     } finally {
       setUpdatingIds(prev => ({ ...prev, [patientId]: false }));
     }
+  };
+
+  const getNextActiveStage = (stage: StageId): StageId | null => {
+    const currentIndex = ACTIVE_STAGE_COLUMNS.findIndex((column) => column.patientStage === stage);
+    if (currentIndex === -1 || currentIndex === ACTIVE_STAGE_COLUMNS.length - 1) return null;
+    return ACTIVE_STAGE_COLUMNS[currentIndex + 1].patientStage as StageId;
   };
 
   const handleSendLink = async (patient: Patient) => {
@@ -890,102 +904,150 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       )}
 
       {/* 6. PATIENT LIST */}
-      <div className="space-y-8">
-        {patients.length === 0 && (
-          <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-500">
-            {viewMode === 'history'
-              ? 'No archived patients match the selected filters.'
-              : 'No patients found for this view.'}
-          </div>
-        )}
-        {patients.map(patient => {
-          const assignedDoc = allDoctors.find(d => d.id === patient.doctor_id);
-          const clientLink = `${window.location.origin}/?id=${patient.id}&code=${patient.access_code}`;
-          const isProcessing = updatingIds[patient.id];
+      {viewMode === 'active' ? (
+        <div className="h-full">
+          <div className="flex overflow-x-auto gap-6 pb-8 items-start h-full [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            {ACTIVE_STAGE_COLUMNS.map((column) => {
+              const columnPatients = patients.filter((patient) => patient.stage === column.patientStage);
+              return (
+                <div key={column.id} className="min-w-[320px] w-[320px] flex-shrink-0 bg-gray-50 rounded-xl p-4">
+                  <div className={`rounded-lg ${column.color} px-3 py-2 text-white mb-4`}>
+                    <p className="text-sm font-bold uppercase tracking-wide">{column.title}</p>
+                    <p className="text-xs font-semibold text-white/80">{columnPatients.length} patient{columnPatients.length === 1 ? '' : 's'}</p>
+                  </div>
 
-          return (
-            <div key={patient.id} className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden group transition-all hover:shadow-md">
-              <div className="p-10 lg:p-12">
-                <div className="flex flex-col lg:flex-row justify-between items-start gap-8 mb-10">
-                  <div>
-                    <h3 className="text-4xl font-extrabold text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors font-sans">{patient.name}</h3>
-                    <div className="flex flex-wrap items-center gap-6 text-sm font-bold text-slate-500">
-                       <span className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 font-sans"><User size={18}/> {patient.owner}</span>
-                       <span className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl border border-indigo-100 font-sans">
-                          <ShieldCheck size={18}/> {assignedDoc ? assignedDoc.name : 'Unassigned'}
-                       </span>
+                  {columnPatients.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-slate-200 bg-white/60 px-4 py-6 text-center text-xs font-semibold text-slate-400">
+                      No patients in this stage.
                     </div>
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    <a href={clientLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-8 py-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-sm font-bold border border-slate-100 transition-all font-sans"><Eye size={20}/> Preview</a>
-                    {viewMode === 'active' && <button onClick={() => handleSendLink(patient)} disabled={sendingLink[patient.id]} className="flex items-center gap-2 px-8 py-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-sm font-bold border border-slate-100 transition-all font-sans">{sendingLink[patient.id] ? <Loader2 className="animate-spin" size={20}/> : <Send size={20}/>} Send Link</button>}
-                    <button onClick={() => setAdvancedOpen(prev => ({ ...prev, [patient.id]: !prev[patient.id] }))} className="flex items-center gap-2 px-8 py-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-sm font-bold border border-slate-100 transition-all font-sans">Advanced {advancedOpen[patient.id] ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}</button>
-                  </div>
+                  ) : (
+                    columnPatients.map((patient) => {
+                      const clientLink = `${window.location.origin}/?id=${patient.id}&code=${patient.access_code}`;
+                      const nextStage = getNextActiveStage(patient.stage);
+                      const isProcessing = updatingIds[patient.id];
+
+                      return (
+                        <div key={patient.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-3">
+                          <div className="mb-3">
+                            <h3 className="text-lg font-bold text-slate-900">{patient.name}</h3>
+                            <p className="text-sm font-medium text-slate-600">{patient.owner}</p>
+                            <p className="text-xs font-semibold text-slate-400 mt-1">Tracking ID: {patient.id}</p>
+                          </div>
+
+                          <div className="flex flex-col gap-2">
+                            <button
+                              onClick={() => nextStage && handleStatusUpdate(patient.id, nextStage)}
+                              disabled={!nextStage || isProcessing}
+                              className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                            >
+                              {isProcessing ? <Loader2 className="animate-spin" size={14} /> : null}
+                              {nextStage ? 'Advance Stage' : 'Final Stage'}
+                            </button>
+                            <a
+                              href={clientLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                            >
+                              <Eye size={14} /> View Details
+                            </a>
+                            <button
+                              onClick={() => {
+                                setIsDischargeModalClosing(false);
+                                setDischargeTarget(patient);
+                              }}
+                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-bold text-orange-700 hover:bg-orange-100"
+                            >
+                              <Archive size={14} /> Discharge
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
-                
-                {advancedOpen[patient.id] && (
-                  <div className="bg-slate-50 p-10 rounded-[2rem] border border-slate-200 mb-10 animate-in slide-in-from-top-4">
-                    <label className="block text-xs font-bold uppercase text-slate-400 mb-4 px-1 tracking-widest font-sans">Internal Clinical Note</label>
-                    <textarea onBlur={(e) => api.updateStage(patient.id, patient.stage, doctor.id, e.target.value)} defaultValue={patient.note || ''} className="w-full p-6 bg-white border border-slate-100 rounded-3xl text-lg font-semibold h-28 mb-6 outline-none shadow-sm focus:ring-2 focus:ring-indigo-100 transition-all" placeholder="Enter clinical details..." />
-                    
-                    <div className="flex flex-wrap gap-3 mb-10">
-                        {QUICK_NOTES.map(note => (
-                            <button key={note} onClick={() => api.updateStage(patient.id, patient.stage, doctor.id, note).then(() => loadData())} className="px-6 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all shadow-sm">+ {note}</button>
-                        ))}
-                    </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {patients.length === 0 && (
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-500">
+              {viewMode === 'history'
+                ? 'No archived patients match the selected filters.'
+                : 'No patients found for this view.'}
+            </div>
+          )}
+          {patients.map(patient => {
+            const assignedDoc = allDoctors.find(d => d.id === patient.doctor_id);
+            const clientLink = `${window.location.origin}/?id=${patient.id}&code=${patient.access_code}`;
 
-                    <div className="flex flex-wrap justify-between items-center pt-10 border-t border-slate-200 gap-y-8">
-                      <div className="flex flex-wrap items-center gap-x-12 gap-y-8">
-                        <button onClick={() => setHistoryOpen({...historyOpen, [patient.id]: !historyOpen[patient.id]})} className="text-sm font-bold text-indigo-600 flex items-center gap-2 uppercase tracking-widest hover:opacity-70 font-sans"><History size={20}/> View Logs</button>
-                        <CopyableInfo label="Portal Access" value={clientLink} fieldKey={`${patient.id}-link`} customDisplay="Copy Direct Link" />
-                        <CopyableInfo label="System ID" value={patient.id} fieldKey={`${patient.id}-id`} />
-                        <CopyableInfo label="Security Code" value={patient.access_code} fieldKey={`${patient.id}-code`} />
+            return (
+              <div key={patient.id} className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden group transition-all hover:shadow-md">
+                <div className="p-10 lg:p-12">
+                  <div className="flex flex-col lg:flex-row justify-between items-start gap-8 mb-10">
+                    <div>
+                      <h3 className="text-4xl font-extrabold text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors font-sans">{patient.name}</h3>
+                      <div className="flex flex-wrap items-center gap-6 text-sm font-bold text-slate-500">
+                        <span className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 font-sans"><User size={18} /> {patient.owner}</span>
+                        <span className="flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl border border-indigo-100 font-sans">
+                          <ShieldCheck size={18} /> {assignedDoc ? assignedDoc.name : 'Unassigned'}
+                        </span>
                       </div>
-                      {viewMode === 'active' && <button onClick={() => { setIsDischargeModalClosing(false); setDischargeTarget(patient); }} className="flex items-center gap-2 px-10 py-4 bg-white text-orange-600 border border-orange-100 rounded-2xl text-xs font-bold uppercase tracking-widest shadow-sm hover:bg-orange-50 active:scale-95 transition-all font-sans"><Archive size={20} /> Discharge</button>}
                     </div>
+                    <div className="flex flex-wrap gap-3">
+                      <a href={clientLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-8 py-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-sm font-bold border border-slate-100 transition-all font-sans"><Eye size={20} /> Preview</a>
+                      <button onClick={() => setAdvancedOpen(prev => ({ ...prev, [patient.id]: !prev[patient.id] }))} className="flex items-center gap-2 px-8 py-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-sm font-bold border border-slate-100 transition-all font-sans">Advanced {advancedOpen[patient.id] ? <ChevronUp size={20} /> : <ChevronDown size={20} />}</button>
+                    </div>
+                  </div>
 
-                    {historyOpen[patient.id] && (
-                      <div className="mt-10 border-t border-slate-200 pt-10 max-h-72 overflow-y-auto pr-6 custom-scrollbar">
-                        <div className="space-y-8">
-                          {(patient.stage_history || []).map((event, i) => {
-                            const changer = allDoctors.find(d => d.id === event.changed_by_doctor_id);
-                            return (
-                              <div key={i} className="flex gap-8 items-start animate-in fade-in slide-in-from-left-2">
-                                <div className="w-3 h-3 rounded-full bg-indigo-400 mt-2 shrink-0 shadow-[0_0_12px_rgba(129,140,248,0.6)]" />
-                                <div className="text-base font-sans">
-                                  <p className="font-bold text-slate-900 text-lg leading-none mb-2">{STAGES.find(s => s.id === event.to_stage)?.label}</p>
-                                  <p className="text-sm font-semibold text-slate-400 uppercase tracking-tight">Updated by {changer ? changer.name : 'System'} • {new Date(event.changed_at).toLocaleString()}</p>
-                                </div>
-                              </div>
-                            );
-                          })}
+                  {advancedOpen[patient.id] && (
+                    <div className="bg-slate-50 p-10 rounded-[2rem] border border-slate-200 mb-10 animate-in slide-in-from-top-4">
+                      <label className="block text-xs font-bold uppercase text-slate-400 mb-4 px-1 tracking-widest font-sans">Internal Clinical Note</label>
+                      <textarea onBlur={(e) => api.updateStage(patient.id, patient.stage, doctor.id, e.target.value)} defaultValue={patient.note || ''} className="w-full p-6 bg-white border border-slate-100 rounded-3xl text-lg font-semibold h-28 mb-6 outline-none shadow-sm focus:ring-2 focus:ring-indigo-100 transition-all" placeholder="Enter clinical details..." />
+
+                      <div className="flex flex-wrap gap-3 mb-10">
+                        {QUICK_NOTES.map(note => (
+                          <button key={note} onClick={() => api.updateStage(patient.id, patient.stage, doctor.id, note).then(() => loadData())} className="px-6 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all shadow-sm">+ {note}</button>
+                        ))}
+                      </div>
+
+                      <div className="flex flex-wrap justify-between items-center pt-10 border-t border-slate-200 gap-y-8">
+                        <div className="flex flex-wrap items-center gap-x-12 gap-y-8">
+                          <button onClick={() => setHistoryOpen({ ...historyOpen, [patient.id]: !historyOpen[patient.id] })} className="text-sm font-bold text-indigo-600 flex items-center gap-2 uppercase tracking-widest hover:opacity-70 font-sans"><History size={20} /> View Logs</button>
+                          <CopyableInfo label="Portal Access" value={clientLink} fieldKey={`${patient.id}-link`} customDisplay="Copy Direct Link" />
+                          <CopyableInfo label="System ID" value={patient.id} fieldKey={`${patient.id}-id`} />
+                          <CopyableInfo label="Security Code" value={patient.access_code} fieldKey={`${patient.id}-code`} />
                         </div>
                       </div>
-                    )}
-                  </div>
-                )}
 
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 relative">
-                  {isProcessing && (
-                    <div className="absolute inset-0 bg-white/40 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-[2rem]">
-                      <Loader2 className="animate-spin text-indigo-600" size={40} />
+                      {historyOpen[patient.id] && (
+                        <div className="mt-10 border-t border-slate-200 pt-10 max-h-72 overflow-y-auto pr-6 custom-scrollbar">
+                          <div className="space-y-8">
+                            {(patient.stage_history || []).map((event, i) => {
+                              const changer = allDoctors.find(d => d.id === event.changed_by_doctor_id);
+                              return (
+                                <div key={i} className="flex gap-8 items-start animate-in fade-in slide-in-from-left-2">
+                                  <div className="w-3 h-3 rounded-full bg-indigo-400 mt-2 shrink-0 shadow-[0_0_12px_rgba(129,140,248,0.6)]" />
+                                  <div className="text-base font-sans">
+                                    <p className="font-bold text-slate-900 text-lg leading-none mb-2">{STAGES.find(s => s.id === event.to_stage)?.label}</p>
+                                    <p className="text-sm font-semibold text-slate-400 uppercase tracking-tight">Updated by {changer ? changer.name : 'System'} • {new Date(event.changed_at).toLocaleString()}</p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
-                  {STAGES.map((stage) => {
-                    const isActive = patient.stage === stage.id;
-                    return (
-                      <button key={stage.id} onClick={() => handleStatusUpdate(patient.id, stage.id as StageId)} disabled={viewMode !== 'active' || isProcessing} className={`flex flex-col items-center justify-center p-6 rounded-[2rem] border-2 transition-all ${isActive && viewMode === 'active' ? `${stage.color} border-transparent text-white shadow-xl scale-[1.04]` : 'bg-white border-slate-100 text-slate-500 hover:text-slate-900 hover:bg-slate-50 shadow-sm'} ${viewMode !== 'active' ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                        <stage.icon size={28} className="mb-3" />
-                        <span className="text-sm font-bold leading-tight text-center font-sans">{stage.label}</span>
-                      </button>
-                    );
-                  })}
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
