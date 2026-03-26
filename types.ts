@@ -1,4 +1,4 @@
-export type StageId = 'checked-in' | 'doctor-eval' | 'pre-op' | 'surgery' | 'recovery' | 'ready';
+export type StageId = 'checked-in' | 'doctor-eval' | 'pre-op' | 'surgery' | 'recovery' | 'ready' | 'discharged';
 
 export interface PatientStageEvent {
   from_stage: StageId;
@@ -14,7 +14,7 @@ export interface Patient {
   owner_contact?: string | null;
   owner_phone?: string | null;
   stage: StageId;
-  status: 'active' | 'discharged';
+  status: 'active' | 'discharged' | 'archived';
   clinic_id: string;
   doctor_id: string;
   access_code: string;

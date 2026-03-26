@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Patient } from '../types';
 import { STAGES, CLINIC_CONFIG, CLINIC_ID } from '../constants';
 import { api } from '../services/api';
-import { RefreshCw, CheckCircle, Phone, Mail, Clock, PawPrint } from 'lucide-react';
+import { RefreshCw, CheckCircle, Phone, Mail, Clock, PawPrint, Check } from 'lucide-react';
 import {
   DEFAULT_CLINIC_BRAND_COLOR,
   clinicContactUpdateEvent,
@@ -19,6 +19,16 @@ interface ClientTrackerProps {
 }
 
 export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessCode, onLogout }) => {
+  const stageThemeMap: Record<string, { icon: string; glow: string }> = {
+    'checked-in': { icon: 'text-blue-500', glow: 'bg-blue-50' },
+    'doctor-eval': { icon: 'text-purple-600', glow: 'bg-purple-50' },
+    'pre-op': { icon: 'text-amber-500', glow: 'bg-amber-50' },
+    surgery: { icon: 'text-red-500', glow: 'bg-red-50' },
+    recovery: { icon: 'text-orange-500', glow: 'bg-orange-50' },
+    ready: { icon: 'text-green-500', glow: 'bg-green-50' },
+    discharged: { icon: 'text-green-500', glow: 'bg-green-50' },
+  };
+
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
@@ -26,7 +36,7 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
   const [clinicContact, setClinicContact] = useState(getClinicContactSettings(CLINIC_ID));
   const fetchingRef = useRef(false);
   const reconnectTimerRef = useRef<number | null>(null);
-  const isRealtimeClosedForDischarge = patient?.status === 'discharged';
+  const isRealtimeClosedForDischarge = patient?.status === 'discharged' || patient?.status === 'archived' || patient?.stage === 'discharged';
 
   const fetchStatus = async () => {
     if (fetchingRef.current) return;
@@ -145,9 +155,13 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
   if (loading && !patient) return <div className="flex flex-col items-center justify-center min-h-[50vh] text-gray-500"><RefreshCw className="w-8 h-8 animate-spin text-indigo-500" /></div>;
   if (!patient) return <div className="text-center py-12">No record found.</div>;
 
-  const isDischarged = patient.status === 'discharged';
-  const currentStageIndex = STAGES.findIndex(s => s.id === patient.stage);
-  const currentStageConfig = STAGES[currentStageIndex];
+  const isDischarged = patient.status === 'discharged' || patient.status === 'archived' || patient.stage === 'discharged';
+  const timelineStages = STAGES;
+  const resolvedStageId = patient.stage === 'discharged' ? 'ready' : patient.stage;
+  const currentStageIndex = Math.max(timelineStages.findIndex((stage) => stage.id === resolvedStageId), 0);
+  const currentStageConfig = timelineStages[currentStageIndex];
+  const currentStageTheme = stageThemeMap[patient.stage] || stageThemeMap[resolvedStageId] || stageThemeMap['checked-in'];
+  const progressPercent = timelineStages.length > 1 ? (currentStageIndex / (timelineStages.length - 1)) * 100 : 0;
   const brandColor = /^#[0-9A-F]{6}$/i.test(clinicContact.brandColor) ? clinicContact.brandColor : DEFAULT_CLINIC_BRAND_COLOR;
   const hasLogo = !!clinicContact.logoUrl;
 
@@ -165,6 +179,31 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
         </div>
       )}
 
+      <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="overflow-x-auto pb-2">
+          <div className="relative min-w-[720px] px-2">
+            <div className="absolute left-10 right-10 top-5 h-1 rounded-full bg-slate-200" />
+            <div className="absolute left-10 top-5 h-1 rounded-full bg-indigo-500 transition-all duration-500" style={{ width: `calc((100% - 5rem) * ${progressPercent / 100})` }} />
+            <div className="relative grid grid-cols-6 gap-2">
+              {timelineStages.map((stage, index) => {
+                const isCompleted = index < currentStageIndex;
+                const isCurrent = index === currentStageIndex;
+                const StageIcon = stage.icon;
+                const stageTheme = stageThemeMap[stage.id] || stageThemeMap['checked-in'];
+                return (
+                  <div key={stage.id} className="flex flex-col items-center">
+                    <div className={`z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white ${isCompleted ? 'border-indigo-500 bg-indigo-500 text-white' : isCurrent ? `border-indigo-500 ${stageTheme.icon} animate-pulse` : 'border-slate-300 text-slate-400'}`}>
+                      {isCompleted ? <Check size={16} strokeWidth={3} /> : <StageIcon size={16} />}
+                    </div>
+                    <p className={`mt-2 text-center text-xs font-semibold ${isCurrent ? 'text-slate-900' : 'text-slate-500'}`}>{stage.label}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-8">
         <div className="p-6 text-white flex justify-between items-start" style={{ backgroundColor: brandColor }}>
           <div>
@@ -177,13 +216,10 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
         </div>
         
         <div className="p-12 text-center">
-          <div
-            className={`inline-flex p-6 rounded-full mb-6 shadow-lg scale-110 text-white ${isDischarged ? 'bg-emerald-500' : ''}`}
-            style={!isDischarged ? { backgroundColor: brandColor } : undefined}
-          >
-            {isDischarged ? <CheckCircle size={56} strokeWidth={1.5} /> : <currentStageConfig.icon size={56} strokeWidth={1.5} />}
+          <div className={`inline-flex p-6 rounded-full mb-6 shadow-lg scale-110 ${currentStageTheme.glow}`}>
+            {isDischarged ? <CheckCircle className={currentStageTheme.icon} size={56} strokeWidth={1.5} /> : <currentStageConfig.icon className={currentStageTheme.icon} size={56} strokeWidth={1.5} />}
           </div>
-          <h2 className={`text-4xl font-extrabold mb-3 ${isDischarged ? 'text-emerald-600' : ''}`} style={!isDischarged ? { color: brandColor } : undefined}>
+          <h2 className={`text-4xl font-extrabold mb-3 ${isDischarged ? 'text-emerald-600' : currentStageTheme.icon}`}>
             {isDischarged ? 'Officially Discharged' : currentStageConfig?.label}
           </h2>
           <p className="text-xl text-gray-600 max-w-lg mx-auto leading-relaxed italic">

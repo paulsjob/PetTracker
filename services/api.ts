@@ -149,9 +149,14 @@ export const api = {
 
   dischargePatient: async (id: string): Promise<void> => {
     if (!supabase) return;
-    const { error } = await supabase.rpc('discharge_patient_with_grace', {
-      discharge_patient_id: id,
-    });
+    const { error } = await supabase
+      .from('patients')
+      .update({
+        status: 'archived',
+        stage: 'discharged',
+        discharged_at: new Date().toISOString(),
+      })
+      .eq('id', id);
     if (error) throw error;
   },
 };

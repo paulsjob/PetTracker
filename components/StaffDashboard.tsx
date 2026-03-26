@@ -65,6 +65,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const [sendingLink, setSendingLink] = useState<Record<string, boolean>>({});
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [dischargeTarget, setDischargeTarget] = useState<Patient | null>(null);
+  const [isDischargeModalClosing, setIsDischargeModalClosing] = useState(false);
   
   const [newPatient, setNewPatient] = useState({ name: '', owner: '', owner_contact: '' });
   const [newStaff, setNewStaff] = useState({ name: '', specialty: 'Internal Medicine', email: '' });
@@ -91,7 +92,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
       if (viewMode === 'history') {
         patientQuery = patientQuery
-          .eq('status', 'discharged')
+          .eq('status', 'archived')
           .or(`access_code_expires_at.lte.${nowIso},and(access_code_expires_at.is.null,discharged_at.lte.${fallbackGraceCutoff})`)
           .order('discharged_at', { ascending: false });
 
@@ -109,7 +110,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
         }
       } else {
         patientQuery = patientQuery
-          .eq('status', viewMode)
+          .eq('status', viewMode === 'discharged' ? 'archived' : viewMode)
           .order('name', { ascending: true });
       }
 
@@ -135,7 +136,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
           event: '*',
           schema: 'public',
           table: 'patients',
-          filter: `clinic_id=eq.${CLINIC_ID},status=eq.${viewMode === 'history' ? 'discharged' : viewMode}`,
+          filter: `clinic_id=eq.${CLINIC_ID},status=eq.${viewMode === 'history' || viewMode === 'discharged' ? 'archived' : viewMode}`,
         },
         () => loadData({ silent: true }),
       )
@@ -372,6 +373,25 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     finally { setSendingLink(prev => ({ ...prev, [patient.id]: false })); }
   };
 
+  const closeDischargeModal = () => {
+    setIsDischargeModalClosing(true);
+  };
+
+  const handleDischarge = async () => {
+    if (!dischargeTarget) return;
+    try {
+      await api.dischargePatient(dischargeTarget.id);
+      await auditDoctorAction('patient.discharged', 'patient', dischargeTarget.id, {
+        patientName: dischargeTarget.name,
+      });
+      setPatients((prev) => prev.filter((patient) => patient.id !== dischargeTarget.id));
+      setIsDischargeModalClosing(true);
+      showNotification('Discharged');
+    } catch (error) {
+      showNotification('Discharge failed', 'error');
+    }
+  };
+
   const toggleDoctorAdmin = async (targetDoctor: Doctor) => {
     const nextAdminValue = !targetDoctor.is_admin;
     if (targetDoctor.id === doctor.id && !nextAdminValue) {
@@ -437,7 +457,14 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
       )}
 
       {dischargeTarget && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+        <div
+          className={`fixed inset-0 z-[200] flex items-center justify-center p-4 transition-opacity duration-200 ${isDischargeModalClosing ? 'opacity-0' : 'opacity-100'} bg-slate-900/60 backdrop-blur-sm`}
+          onTransitionEnd={() => {
+            if (!isDischargeModalClosing) return;
+            setDischargeTarget(null);
+            setIsDischargeModalClosing(false);
+          }}
+        >
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden font-sans">
             <div className="p-8 text-center">
               <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-500"><AlertTriangle size={32} /></div>
@@ -445,20 +472,8 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
               <p className="text-sm text-slate-500 font-medium">Move <span className="font-bold text-slate-900">{dischargeTarget.name}</span> to archives?</p>
             </div>
             <div className="flex border-t border-slate-100">
-              <button onClick={() => setDischargeTarget(null)} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 border-r border-slate-100">Cancel</button>
-              <button onClick={async () => {
-                try {
-                  await api.dischargePatient(dischargeTarget.id);
-                  await auditDoctorAction('patient.discharged', 'patient', dischargeTarget.id, {
-                    patientName: dischargeTarget.name,
-                  });
-                  setDischargeTarget(null);
-                  loadData();
-                  showNotification('Discharged');
-                } catch (error) {
-                  showNotification('Discharge failed', 'error');
-                }
-              }} className="flex-1 px-6 py-4 text-sm font-bold text-orange-600 hover:bg-orange-50">Discharge</button>
+              <button onClick={closeDischargeModal} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 border-r border-slate-100">Cancel</button>
+              <button onClick={handleDischarge} className="flex-1 px-6 py-4 text-sm font-bold text-orange-600 hover:bg-orange-50">Discharge</button>
             </div>
           </div>
         </div>
@@ -860,7 +875,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                         <CopyableInfo label="System ID" value={patient.id} fieldKey={`${patient.id}-id`} />
                         <CopyableInfo label="Security Code" value={patient.access_code} fieldKey={`${patient.id}-code`} />
                       </div>
-                      {viewMode === 'active' && <button onClick={() => setDischargeTarget(patient)} className="flex items-center gap-2 px-10 py-4 bg-white text-orange-600 border border-orange-100 rounded-2xl text-xs font-bold uppercase tracking-widest shadow-sm hover:bg-orange-50 active:scale-95 transition-all font-sans"><Archive size={20} /> Discharge</button>}
+                      {viewMode === 'active' && <button onClick={() => { setIsDischargeModalClosing(false); setDischargeTarget(patient); }} className="flex items-center gap-2 px-10 py-4 bg-white text-orange-600 border border-orange-100 rounded-2xl text-xs font-bold uppercase tracking-widest shadow-sm hover:bg-orange-50 active:scale-95 transition-all font-sans"><Archive size={20} /> Discharge</button>}
                     </div>
 
                     {historyOpen[patient.id] && (
