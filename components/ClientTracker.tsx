@@ -216,9 +216,9 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
         </div>
 
         <div className="border-t border-slate-100 px-4 pb-6">
-          <div className="overflow-x-auto pt-4">
-            <div className="min-w-[720px] px-2 pt-2">
-              <div className="flex items-start">
+          <div className="overflow-x-auto overflow-y-hidden py-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <div className="min-w-[720px] w-max mx-auto px-2 pt-2">
+              <div className="flex items-start justify-center">
                 {timelineStages.map((stage, index) => {
                   const isCompleted = index < currentStageIndex;
                   const isCurrent = index === currentStageIndex;
