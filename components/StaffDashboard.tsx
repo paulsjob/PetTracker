@@ -67,7 +67,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const [dischargeTarget, setDischargeTarget] = useState<Patient | null>(null);
   const [isDischargeModalClosing, setIsDischargeModalClosing] = useState(false);
   
-  const [newPatient, setNewPatient] = useState({ name: '', owner: '', owner_contact: '' });
+  const [newPatient, setNewPatient] = useState({ name: '', owner: '', owner_phone: '' });
   const [newStaff, setNewStaff] = useState({ name: '', specialty: 'Internal Medicine', email: '' });
   const [clinicContactForm, setClinicContactForm] = useState(getClinicContactSettings());
   const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([]);
@@ -213,6 +213,22 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 5000);
+  };
+
+  const generateTrackingId = () => {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  };
+
+  const generateAccessCode = () => {
+    return Array.from({ length: 6 }, () => Math.floor(Math.random() * 10).toString()).join('');
+  };
+
+  const normalizeUSPhone = (input: string) => {
+    const digits = input.replace(/\D/g, '');
+    if (digits.length === 10) return `+1${digits}`;
+    if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+    return null;
   };
 
   const runAdminAction = async (action: () => PromiseLike<void> | void) => {
@@ -750,35 +766,72 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
           <h2 className="text-sm font-bold mb-6 uppercase tracking-widest text-slate-400 px-1">Check In New Patient</h2>
           <form onSubmit={async (e) => {
             e.preventDefault();
-            const id = Math.random().toString(36).substring(2, 14);
-            const code = Math.floor(100000 + Math.random() * 900000).toString();
-            const ownerContact = newPatient.owner_contact.trim();
+            const petName = newPatient.name.trim();
+            const ownerName = newPatient.owner.trim();
+            const normalizedOwnerPhone = normalizeUSPhone(newPatient.owner_phone);
+
+            if (!petName || !ownerName || !normalizedOwnerPhone) {
+              showNotification('Please enter pet name, owner name, and a valid US phone number.', 'error');
+              return;
+            }
+
+            const id = generateTrackingId();
+            const accessCode = generateAccessCode();
+
             const { error } = await supabase.from('patients').insert([{
-              ...newPatient,
-              owner_contact: ownerContact || null,
-              owner_phone: ownerContact.includes('@') ? null : ownerContact || null,
               id,
-              clinic_id: CLINIC_ID,
-              doctor_id: doctor.id,
+              name: petName,
+              owner: ownerName,
+              owner_phone: normalizedOwnerPhone,
+              access_code: accessCode,
               stage: 'checked-in',
               status: 'active',
-              access_code: code,
+              clinic_id: 'default',
+              doctor_id: doctor.id,
+              owner_contact: normalizedOwnerPhone,
               stage_history: [],
             }]);
-            if (!error) {
-              await auditDoctorAction('patient.created', 'patient', id, {
-                patientName: newPatient.name,
-                ownerName: newPatient.owner,
-              });
-              await api.notifyParent(id, 'check-in-link');
-              setNewPatient({ name: '', owner: '', owner_contact: '' });
-              loadData();
-              showNotification("Checked in!");
+
+            if (error) {
+              showNotification(`Check-in failed: ${error.message}`, 'error');
+              return;
             }
+
+            void fetch('/api/sms', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                phoneNumber: normalizedOwnerPhone,
+                petName,
+                trackingId: id,
+                accessCode,
+              }),
+            });
+
+            setNewPatient({ name: '', owner: '', owner_phone: '' });
+            setPatients((previous) => [{
+              id,
+              name: petName,
+              owner: ownerName,
+              owner_phone: normalizedOwnerPhone,
+              owner_contact: normalizedOwnerPhone,
+              access_code: accessCode,
+              stage: 'checked-in',
+              status: 'active',
+              clinic_id: 'default',
+              doctor_id: doctor.id,
+              stage_history: [],
+            } as Patient, ...previous]);
+            showNotification("Checked in!");
+
+            void auditDoctorAction('patient.created', 'patient', id, {
+              patientName: petName,
+              ownerName,
+            });
           }} className="grid grid-cols-1 md:grid-cols-12 gap-6">
-            <div className="md:col-span-3"><input type="text" value={newPatient.name} onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Pet Name" /></div>
-            <div className="md:col-span-3"><input type="text" value={newPatient.owner} onChange={(e) => setNewPatient({ ...newPatient, owner: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Owner Name" /></div>
-            <div className="md:col-span-3"><input type="text" value={newPatient.owner_contact} onChange={(e) => setNewPatient({ ...newPatient, owner_contact: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Owner Phone or Email" /></div>
+            <div className="md:col-span-3"><input type="text" required value={newPatient.name} onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Pet Name" /></div>
+            <div className="md:col-span-3"><input type="text" required value={newPatient.owner} onChange={(e) => setNewPatient({ ...newPatient, owner: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Owner Name" /></div>
+            <div className="md:col-span-3"><input type="tel" required inputMode="tel" pattern="^\\s*(?:\\+1\\s*)?(?:\\([2-9]\\d{2}\\)|[2-9]\\d{2})[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\s*$" value={newPatient.owner_phone} onChange={(e) => setNewPatient({ ...newPatient, owner_phone: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Owner Phone (US)" /></div>
             <div className="md:col-span-3"><button type="submit" className="w-full bg-indigo-600 text-white font-bold text-lg py-4 rounded-2xl shadow-lg transition-all hover:bg-indigo-700">Check In</button></div>
           </form>
         </div>
