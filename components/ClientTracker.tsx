@@ -170,7 +170,6 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
   const currentStageIndex = Math.max(timelineStages.findIndex((stage) => stage.id === resolvedStageId), 0);
   const currentStageConfig = timelineStages[currentStageIndex];
   const currentStageTheme = stageThemeMap[patient.stage] || stageThemeMap[resolvedStageId] || stageThemeMap['checked-in'];
-  const progressPercent = timelineStages.length > 1 ? (currentStageIndex / (timelineStages.length - 1)) * 100 : 0;
   const brandColor = /^#[0-9A-F]{6}$/i.test(clinicContact.brandColor) ? clinicContact.brandColor : DEFAULT_CLINIC_BRAND_COLOR;
   const hasLogo = !!clinicContact.logoUrl;
 
@@ -218,28 +217,37 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
 
         <div className="border-t border-slate-100 px-4 pb-6">
           <div className="overflow-x-auto pt-4">
-            <div className="relative min-w-[720px] px-2">
-              <div className="absolute left-10 right-10 top-5 h-2 rounded-full bg-gray-300" />
-              <div
-                className="absolute left-10 top-5 h-2 rounded-full bg-indigo-500 transition-all duration-500"
-                style={{ width: `calc((100% - 5rem) * ${progressPercent / 100})` }}
-              />
-              <div className="relative grid grid-cols-6 gap-2">
+            <div className="min-w-[720px] px-2 pt-2">
+              <div className="flex items-start">
                 {timelineStages.map((stage, index) => {
                   const isCompleted = index < currentStageIndex;
                   const isCurrent = index === currentStageIndex;
+                  const isFuture = index > currentStageIndex;
                   const stageSolidColor = stageSolidColorMap[stage.id] || 'bg-blue-500';
                   return (
-                    <div key={stage.id} className="flex flex-col items-center">
-                      <div
-                        className={`z-10 flex h-10 w-10 items-center justify-center rounded-full text-white ${
-                          isCompleted ? stageSolidColor : isCurrent ? `${stageSolidColor} animate-pulse` : 'bg-gray-200 text-transparent'
-                        }`}
-                      >
-                        {isCompleted ? <Check size={16} strokeWidth={3} /> : null}
+                    <React.Fragment key={stage.id}>
+                      <div className="flex flex-col items-center">
+                        <p className="mb-3 text-[10px] uppercase font-bold tracking-widest text-gray-500 text-center whitespace-nowrap">
+                          {stage.label}
+                        </p>
+                        <div className="relative flex h-5 w-5 items-center justify-center">
+                          {isCurrent ? <span className={`absolute h-8 w-8 rounded-full ${stageSolidColor} opacity-30 animate-ping`} /> : null}
+                          <div
+                            className={`relative z-10 flex h-5 w-5 items-center justify-center rounded-full ${
+                              isFuture ? 'bg-gray-200' : stageSolidColor
+                            }`}
+                          >
+                            {isCompleted ? <Check size={10} strokeWidth={3} className="text-white" /> : null}
+                            {isCurrent ? <span className="h-1.5 w-1.5 rounded-full bg-white" /> : null}
+                          </div>
+                        </div>
                       </div>
-                      <p className={`mt-2 text-center text-xs font-semibold ${isCurrent ? 'text-slate-900' : 'text-slate-500'}`}>{stage.label}</p>
-                    </div>
+                      {index < timelineStages.length - 1 ? (
+                        <div className="flex-1 px-1 pt-[1.625rem]">
+                          <div className="h-[2px] bg-gray-200" />
+                        </div>
+                      ) : null}
+                    </React.Fragment>
                   );
                 })}
               </div>

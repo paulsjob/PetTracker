@@ -380,15 +380,26 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const handleDischarge = async () => {
     if (!dischargeTarget) return;
     const patientId = dischargeTarget.id;
+    const patientName = dischargeTarget.name;
+    const updateData = {
+      status: 'archived',
+      stage: 'discharged',
+      discharged_at: new Date().toISOString(),
+    };
     try {
-      await api.dischargePatient(patientId);
-      await auditDoctorAction('patient.discharged', 'patient', patientId, {
-        patientName: dischargeTarget.name,
-      });
+      const { error } = await supabase
+        .from('patients')
+        .update(updateData)
+        .eq('id', patientId);
+      if (error) throw error;
+
       setDischargeTarget(null);
       setPatients((prev) => prev.filter((patient) => patient.id !== patientId));
       setIsDischargeModalClosing(true);
       showNotification('Discharged');
+      await auditDoctorAction('patient.discharged', 'patient', patientId, {
+        patientName,
+      });
     } catch (error) {
       showNotification('Discharge failed', 'error');
     }
