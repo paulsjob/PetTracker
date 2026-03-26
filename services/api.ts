@@ -147,7 +147,7 @@ export const api = {
     window.dispatchEvent(new CustomEvent('vettrack:update', { detail: { id } }));
   },
 
-  dischargePatient: async (id: string): Promise<void> => {
+  dischargePatient: async (patientId: string): Promise<void> => {
     if (!supabase) return;
     const { error } = await supabase
       .from('patients')
@@ -156,7 +156,7 @@ export const api = {
         stage: 'discharged',
         discharged_at: new Date().toISOString(),
       })
-      .eq('id', id);
+      .eq('id', patientId);
     if (error) throw error;
   },
 };

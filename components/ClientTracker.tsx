@@ -28,6 +28,15 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
     ready: { icon: 'text-green-500', glow: 'bg-green-50' },
     discharged: { icon: 'text-green-500', glow: 'bg-green-50' },
   };
+  const stageSolidColorMap: Record<string, string> = {
+    'checked-in': 'bg-blue-500',
+    'doctor-eval': 'bg-purple-600',
+    'pre-op': 'bg-amber-500',
+    surgery: 'bg-red-500',
+    recovery: 'bg-orange-500',
+    ready: 'bg-green-500',
+    discharged: 'bg-green-500',
+  };
 
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
@@ -179,31 +188,6 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
         </div>
       )}
 
-      <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="overflow-x-auto pb-2">
-          <div className="relative min-w-[720px] px-2">
-            <div className="absolute left-10 right-10 top-5 h-1 rounded-full bg-slate-200" />
-            <div className="absolute left-10 top-5 h-1 rounded-full bg-indigo-500 transition-all duration-500" style={{ width: `calc((100% - 5rem) * ${progressPercent / 100})` }} />
-            <div className="relative grid grid-cols-6 gap-2">
-              {timelineStages.map((stage, index) => {
-                const isCompleted = index < currentStageIndex;
-                const isCurrent = index === currentStageIndex;
-                const StageIcon = stage.icon;
-                const stageTheme = stageThemeMap[stage.id] || stageThemeMap['checked-in'];
-                return (
-                  <div key={stage.id} className="flex flex-col items-center">
-                    <div className={`z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white ${isCompleted ? 'border-indigo-500 bg-indigo-500 text-white' : isCurrent ? `border-indigo-500 ${stageTheme.icon} animate-pulse` : 'border-slate-300 text-slate-400'}`}>
-                      {isCompleted ? <Check size={16} strokeWidth={3} /> : <StageIcon size={16} />}
-                    </div>
-                    <p className={`mt-2 text-center text-xs font-semibold ${isCurrent ? 'text-slate-900' : 'text-slate-500'}`}>{stage.label}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-8">
         <div className="p-6 text-white flex justify-between items-start" style={{ backgroundColor: brandColor }}>
           <div>
@@ -229,6 +213,37 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
           </p>
           <div className="mt-8 text-xs text-gray-300 flex items-center justify-center gap-1">
              <RefreshCw size={10} /> Refreshed: {lastUpdated.toLocaleTimeString()}
+          </div>
+        </div>
+
+        <div className="border-t border-slate-100 px-4 pb-6">
+          <div className="overflow-x-auto pt-4">
+            <div className="relative min-w-[720px] px-2">
+              <div className="absolute left-10 right-10 top-5 h-2 rounded-full bg-gray-300" />
+              <div
+                className="absolute left-10 top-5 h-2 rounded-full bg-indigo-500 transition-all duration-500"
+                style={{ width: `calc((100% - 5rem) * ${progressPercent / 100})` }}
+              />
+              <div className="relative grid grid-cols-6 gap-2">
+                {timelineStages.map((stage, index) => {
+                  const isCompleted = index < currentStageIndex;
+                  const isCurrent = index === currentStageIndex;
+                  const stageSolidColor = stageSolidColorMap[stage.id] || 'bg-blue-500';
+                  return (
+                    <div key={stage.id} className="flex flex-col items-center">
+                      <div
+                        className={`z-10 flex h-10 w-10 items-center justify-center rounded-full text-white ${
+                          isCompleted ? stageSolidColor : isCurrent ? `${stageSolidColor} animate-pulse` : 'bg-gray-200 text-transparent'
+                        }`}
+                      >
+                        {isCompleted ? <Check size={16} strokeWidth={3} /> : null}
+                      </div>
+                      <p className={`mt-2 text-center text-xs font-semibold ${isCurrent ? 'text-slate-900' : 'text-slate-500'}`}>{stage.label}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       </div>

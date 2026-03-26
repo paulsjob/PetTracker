@@ -379,12 +379,14 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
 
   const handleDischarge = async () => {
     if (!dischargeTarget) return;
+    const patientId = dischargeTarget.id;
     try {
-      await api.dischargePatient(dischargeTarget.id);
-      await auditDoctorAction('patient.discharged', 'patient', dischargeTarget.id, {
+      await api.dischargePatient(patientId);
+      await auditDoctorAction('patient.discharged', 'patient', patientId, {
         patientName: dischargeTarget.name,
       });
-      setPatients((prev) => prev.filter((patient) => patient.id !== dischargeTarget.id));
+      setDischargeTarget(null);
+      setPatients((prev) => prev.filter((patient) => patient.id !== patientId));
       setIsDischargeModalClosing(true);
       showNotification('Discharged');
     } catch (error) {
