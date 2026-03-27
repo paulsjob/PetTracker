@@ -16,7 +16,7 @@ import { downloadJsonAsCsv } from '../services/csvExport';
 import { 
   LogOut, Dog, Stethoscope, History, ChevronDown, ChevronUp, 
   Send, Loader2, User, Eye, Archive, Copy, Check, AlertTriangle, 
-  CheckCircle, ShieldCheck, Users, UserPlus, UserMinus, Trash2, Phone, ClipboardList, Download
+  CheckCircle, ShieldCheck, Users, UserPlus, UserMinus, Trash2, Phone, ClipboardList, Download, X
 } from 'lucide-react';
 
 const QUICK_NOTES = ["Doing well", "Vitals stable", "In progress", "Waking up", "Ready soon", "Call pending"];
@@ -74,6 +74,7 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [dischargeTarget, setDischargeTarget] = useState<Patient | null>(null);
   const [isDischargeModalClosing, setIsDischargeModalClosing] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   
   const [newPatient, setNewPatient] = useState({ name: '', owner: '', owner_phone: '' });
   const [newStaff, setNewStaff] = useState({ name: '', specialty: 'Internal Medicine', email: '' });
@@ -472,6 +473,10 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
     );
   };
 
+  const selectedPatientRecord = selectedPatient
+    ? patients.find((patient) => patient.id === selectedPatient.id) || selectedPatient
+    : null;
+
   return (
     <div className="max-w-7xl mx-auto pb-20 p-4 relative font-sans bg-slate-50 min-h-screen">
       {/* 1. MODALS */}
@@ -517,6 +522,91 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
             <div className="flex border-t border-slate-100">
               <button onClick={closeDischargeModal} className="flex-1 px-6 py-4 text-sm font-bold text-slate-400 hover:bg-slate-50 border-r border-slate-100">Cancel</button>
               <button onClick={handleDischarge} className="flex-1 px-6 py-4 text-sm font-bold text-orange-600 hover:bg-orange-50">Discharge</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedPatientRecord && (
+        <div
+          className="fixed inset-0 z-[220] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setSelectedPatient(null)}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl md:p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-bold text-slate-900">{selectedPatientRecord.name}</h3>
+                <p className="text-sm font-medium text-slate-500">Owner: {selectedPatientRecord.owner}</p>
+              </div>
+              <button
+                onClick={() => setSelectedPatient(null)}
+                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Close details modal"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-400">Clinical Notes</label>
+                <textarea
+                  onBlur={(e) => api.updateStage(selectedPatientRecord.id, selectedPatientRecord.stage, doctor.id, e.target.value)}
+                  defaultValue={selectedPatientRecord.note || ''}
+                  className="h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-medium outline-none focus:border-indigo-300"
+                  placeholder="Enter clinical details..."
+                />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {QUICK_NOTES.map((note) => (
+                    <button
+                      key={note}
+                      onClick={() => api.updateStage(selectedPatientRecord.id, selectedPatientRecord.stage, doctor.id, note).then(() => loadData())}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+                    >
+                      + {note}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-400">Activity Log</h4>
+                <div className="max-h-56 space-y-3 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  {(selectedPatientRecord.stage_history || []).length > 0 ? (
+                    (selectedPatientRecord.stage_history || []).map((event, i) => {
+                      const changer = allDoctors.find((d) => d.id === event.changed_by_doctor_id);
+                      return (
+                        <div key={`${event.changed_at || i}-${i}`} className="rounded-xl border border-slate-200 bg-white p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-slate-800">{STAGES.find((stage) => stage.id === event.to_stage)?.label || 'Unknown Stage'}</p>
+                            <span className="text-xs font-medium text-slate-400">{new Date(event.changed_at).toLocaleString()}</span>
+                          </div>
+                          <p className="mt-1 text-xs font-medium text-slate-400">by {changer?.name || 'System'}</p>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-sm font-medium text-slate-500">No activity logged yet.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <h4 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-400">Security Credentials</h4>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <CopyableInfo
+                    label="Portal Access"
+                    value={`https://pettracker.io/?id=${selectedPatientRecord.id}&code=${selectedPatientRecord.access_code}`}
+                    fieldKey={`${selectedPatientRecord.id}-modal-link`}
+                    customDisplay="Copy Direct Link"
+                  />
+                  <CopyableInfo label="System ID" value={selectedPatientRecord.id} fieldKey={`${selectedPatientRecord.id}-modal-id`} />
+                  <CopyableInfo label="Security Code" value={selectedPatientRecord.access_code} fieldKey={`${selectedPatientRecord.id}-modal-code`} />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -922,43 +1012,62 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                     </div>
                   ) : (
                     columnPatients.map((patient) => {
-                      const clientLink = `${window.location.origin}/?id=${patient.id}&code=${patient.access_code}`;
+                      const trackingLink = `https://pettracker.io/?id=${patient.id}&code=${patient.access_code}`;
                       const nextStage = getNextActiveStage(patient.stage);
                       const isProcessing = updatingIds[patient.id];
+                      const trackingLinkFieldKey = `${patient.id}-tracking-link`;
+                      const isTrackingLinkCopied = copiedField === trackingLinkFieldKey;
 
                       return (
-                        <div key={patient.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-3">
-                          <div className="mb-3">
-                            <h3 className="text-lg font-bold text-slate-900">{patient.name}</h3>
-                            <p className="text-sm font-medium text-slate-600">{patient.owner}</p>
-                            <p className="text-xs font-semibold text-slate-400 mt-1">Tracking ID: {patient.id}</p>
+                        <div key={patient.id} className="mb-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                          <div className="mb-2">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <h3 className="text-sm font-bold text-slate-900">{patient.name}</h3>
+                              <p className="text-xs font-medium text-slate-500">{patient.owner}</p>
+                            </div>
+                            <div className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
+                              <span>Tracking ID: {patient.id}</span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(trackingLink);
+                                  setCopiedField(trackingLinkFieldKey);
+                                  setTimeout(() => setCopiedField(null), 2000);
+                                }}
+                                className="rounded p-0.5 transition-colors hover:bg-slate-100"
+                                aria-label="Copy tracking link"
+                                title={isTrackingLinkCopied ? 'Copied' : 'Copy tracking link'}
+                              >
+                                {isTrackingLinkCopied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} className="text-slate-400" />}
+                              </button>
+                              {isTrackingLinkCopied && <span className="text-[10px] font-bold text-emerald-600">Copied</span>}
+                            </div>
                           </div>
 
-                          <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between gap-2">
                             <button
                               onClick={() => nextStage && handleStatusUpdate(patient.id, nextStage)}
                               disabled={!nextStage || isProcessing}
-                              className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                             >
-                              {isProcessing ? <Loader2 className="animate-spin" size={14} /> : null}
+                              {isProcessing ? <Loader2 className="animate-spin" size={12} /> : null}
                               {nextStage ? 'Advance Stage' : 'Final Stage'}
                             </button>
-                            <a
-                              href={clientLink}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+
+                            <button
+                              onClick={() => setSelectedPatient(patient)}
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
                             >
-                              <Eye size={14} /> View Details
-                            </a>
+                              <Eye size={12} /> Details
+                            </button>
                             <button
                               onClick={() => {
                                 setIsDischargeModalClosing(false);
                                 setDischargeTarget(patient);
                               }}
-                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-bold text-orange-700 hover:bg-orange-100"
+                              className="inline-flex items-center rounded-md p-1.5 text-slate-500 transition-colors hover:bg-orange-50 hover:text-orange-600"
+                              aria-label="Discharge patient"
                             >
-                              <Archive size={14} /> Discharge
+                              <Archive size={12} />
                             </button>
                           </div>
                         </div>
