@@ -1019,13 +1019,13 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                       const isTrackingLinkCopied = copiedField === trackingLinkFieldKey;
 
                       return (
-                        <div key={patient.id} className="mb-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                        <div key={patient.id} className="mb-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
                           <div className="mb-2">
                             <div className="flex items-baseline justify-between gap-2">
                               <h3 className="text-sm font-bold text-slate-900">{patient.name}</h3>
                               <p className="text-xs font-medium text-slate-500">{patient.owner}</p>
                             </div>
-                            <div className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-slate-400">
+                            <div className="mt-1 flex items-center gap-1.5 text-[11px] font-medium tracking-[0.06em] text-slate-400">
                               <span>Tracking ID: {patient.id}</span>
                               <button
                                 onClick={() => {
@@ -1043,31 +1043,31 @@ export const StaffDashboard: React.FC<StaffDashboardProps> = ({ onLogout, doctor
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-between gap-2">
+                          <div className="mt-3 grid grid-cols-[1fr_auto_auto] items-center gap-2">
                             <button
                               onClick={() => nextStage && handleStatusUpdate(patient.id, nextStage)}
                               disabled={!nextStage || isProcessing}
-                              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                             >
                               {isProcessing ? <Loader2 className="animate-spin" size={12} /> : null}
-                              {nextStage ? 'Advance Stage' : 'Final Stage'}
+                              {nextStage ? 'Move to Next Stage' : 'Final Stage'}
                             </button>
 
                             <button
                               onClick={() => setSelectedPatient(patient)}
-                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
+                              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-600 hover:bg-slate-100"
                             >
-                              <Eye size={12} /> Details
+                              <Eye size={12} /> Edit
                             </button>
                             <button
                               onClick={() => {
                                 setIsDischargeModalClosing(false);
                                 setDischargeTarget(patient);
                               }}
-                              className="inline-flex items-center rounded-md p-1.5 text-slate-500 transition-colors hover:bg-orange-50 hover:text-orange-600"
+                              className="inline-flex items-center rounded-lg px-2.5 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500 transition-colors hover:bg-orange-50 hover:text-orange-700"
                               aria-label="Discharge patient"
                             >
-                              <Archive size={12} />
+                              <Archive size={12} className="mr-1" /> Pass
                             </button>
                           </div>
                         </div>

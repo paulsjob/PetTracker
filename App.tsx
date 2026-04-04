@@ -292,23 +292,23 @@ export default function App() {
 
       case 'staff-login':
         return (
-          <div className="max-w-md mx-auto mt-10 relative">
-            <div className="flex justify-between items-center mb-6">
+          <div className="mx-auto mt-14 w-full max-w-lg px-2">
+            <div className="mb-7 flex justify-between items-center">
               <button
                 onClick={() => setView('landing')}
-                className="text-gray-500 hover:text-gray-800 flex items-center gap-1 text-sm font-medium transition-colors"
+                className="text-slate-500 hover:text-slate-800 flex items-center gap-1.5 text-sm font-medium transition-colors"
               >
                 ← Back to Home
               </button>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-              <div className="text-center mb-8">
-                <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <UserCog className="text-indigo-600" size={32} />
+            <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/95 p-10 shadow-[0_20px_70px_rgba(15,23,42,0.08)] backdrop-blur-sm">
+              <div className="mb-10 text-center">
+                <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
+                  <UserCog className="text-slate-700" size={28} />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-800">Staff Portal</h2>
-                <p className="text-gray-500 mt-2">Sign in with your staff email and password.</p>
+                <h2 className="text-[1.9rem] font-semibold tracking-tight text-slate-900">Staff Portal</h2>
+                <p className="mt-2 text-sm leading-relaxed text-slate-500">Sign in with your staff email and password.</p>
               </div>
 
               <form onSubmit={handleStaffLogin} className="space-y-4">
@@ -318,7 +318,7 @@ export default function App() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border rounded-xl outline-none transition-all bg-white text-gray-900 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                    className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-slate-900 outline-none transition-all focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
                     placeholder="staff@clinic.com"
                     autoFocus
                     disabled={isLoggingIn || !!staffLockoutMessage}
@@ -331,7 +331,7 @@ export default function App() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border rounded-xl outline-none transition-all bg-white text-gray-900 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                    className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-slate-900 outline-none transition-all focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
                     placeholder="Password"
                     disabled={isLoggingIn || !!staffLockoutMessage}
                     required
@@ -342,7 +342,7 @@ export default function App() {
                   type="button"
                   onClick={handleForgotPassword}
                   disabled={isSendingReset || isLoggingIn || !email}
-                  className="w-full text-sm font-semibold text-indigo-600 hover:text-indigo-700 disabled:text-slate-400 transition-colors"
+                  className="w-full text-sm font-medium text-slate-600 hover:text-slate-900 disabled:text-slate-400 transition-colors"
                 >
                   {isSendingReset ? 'Sending reset email...' : 'Forgot password?'}
                 </button>
@@ -353,7 +353,7 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={isLoggingIn || !!staffLockoutMessage || !email || !password}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 group"
+                  className="group flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3.5 font-semibold text-white transition-all hover:bg-slate-700 disabled:bg-slate-300"
                 >
                   {isLoggingIn ? 'Signing in...' : 'Access Dashboard'}
                   {!isLoggingIn && <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />}
@@ -366,7 +366,7 @@ export default function App() {
 
       case 'staff-reset':
         return (
-          <div className="max-w-md mx-auto mt-10 relative">
+          <div className="mx-auto mt-14 w-full max-w-lg px-2">
             <div className="flex justify-between items-center mb-6">
               <button
                 onClick={() => setView('staff-login')}
@@ -376,13 +376,13 @@ export default function App() {
               </button>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-              <div className="text-center mb-8">
-                <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <KeyRound className="text-indigo-600" size={32} />
+            <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/95 p-10 shadow-[0_20px_70px_rgba(15,23,42,0.08)] backdrop-blur-sm">
+              <div className="mb-10 text-center">
+                <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
+                  <KeyRound className="text-slate-700" size={28} />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-800">Reset Password</h2>
-                <p className="text-gray-500 mt-2">Set a new password for your staff account.</p>
+                <h2 className="text-[1.9rem] font-semibold tracking-tight text-slate-900">Reset Password</h2>
+                <p className="mt-2 text-sm leading-relaxed text-slate-500">Set a new password for your staff account.</p>
               </div>
 
               <form onSubmit={handleResetPassword} className="space-y-4">
@@ -392,7 +392,7 @@ export default function App() {
                     type="password"
                     value={resetPassword}
                     onChange={(e) => setResetPassword(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border rounded-xl outline-none transition-all bg-white text-gray-900 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                    className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-slate-900 outline-none transition-all focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
                     placeholder="New password"
                     autoFocus
                     disabled={isLoggingIn}
@@ -406,7 +406,7 @@ export default function App() {
                     type="password"
                     value={confirmResetPassword}
                     onChange={(e) => setConfirmResetPassword(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border rounded-xl outline-none transition-all bg-white text-gray-900 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                    className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-slate-900 outline-none transition-all focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
                     placeholder="Confirm new password"
                     disabled={isLoggingIn}
                     required
@@ -419,7 +419,7 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={isLoggingIn || !resetPassword || !confirmResetPassword}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all"
+                  className="w-full rounded-xl bg-slate-900 py-3.5 font-semibold text-white transition-all hover:bg-slate-700 disabled:bg-slate-300"
                 >
                   {isLoggingIn ? 'Updating password...' : 'Save New Password'}
                 </button>
@@ -430,32 +430,32 @@ export default function App() {
 
       case 'patient-login':
         return (
-          <div className="max-w-md mx-auto mt-10 relative">
-            <div className="flex justify-between items-center mb-6">
+          <div className="mx-auto mt-14 w-full max-w-lg px-2">
+            <div className="mb-7 flex justify-between items-center">
               <button
                 onClick={() => setView('landing')}
-                className="text-gray-500 hover:text-gray-800 flex items-center gap-1 text-sm font-medium transition-colors"
+                className="text-slate-500 hover:text-slate-800 flex items-center gap-1.5 text-sm font-medium transition-colors"
               >
                 ← Back to Home
               </button>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-              <div className="text-center mb-8">
-                <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <PawPrint className="text-indigo-600" size={32} />
+            <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/95 p-10 shadow-[0_20px_70px_rgba(15,23,42,0.08)] backdrop-blur-sm">
+              <div className="mb-10 text-center">
+                <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
+                  <PawPrint className="text-slate-700" size={28} />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-800">Pet Parent Login</h2>
-                <p className="text-gray-500 mt-2">
+                <h2 className="text-[1.95rem] font-semibold tracking-tight text-slate-900">Pet Parent Login</h2>
+                <p className="mt-2 text-sm leading-relaxed text-slate-500">
                   {prefilledId
                     ? 'Verify your ID and enter the 6-digit Access Code from your paperwork.'
                     : 'Enter your Patient ID and 6-digit Access Code from your paperwork.'}
                 </p>
               </div>
 
-              <form onSubmit={handlePatientLogin}>
-                <div className="mb-4">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+              <form onSubmit={handlePatientLogin} className="space-y-5">
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                     Patient ID {prefilledId ? '(From Link)' : ''}
                   </label>
                   <div className="relative">
@@ -465,10 +465,10 @@ export default function App() {
                       value={prefilledId || manualPatientId}
                       onChange={(e) => !prefilledId && setManualPatientId(sanitizePatientId(e.target.value))}
                       disabled={!!prefilledId}
-                      className={`w-full pl-10 pr-4 py-3 font-mono text-sm border rounded-xl outline-none transition-all ${
+                      className={`w-full rounded-xl border py-3 pl-10 pr-4 font-mono text-[13px] tracking-wide outline-none transition-all ${
                         prefilledId
-                          ? 'bg-gray-50 text-gray-500 border-gray-200 cursor-not-allowed select-none'
-                          : 'bg-white text-gray-900 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50'
+                          ? 'cursor-not-allowed select-none border-slate-200 bg-slate-100 text-slate-500'
+                          : 'border-slate-200 bg-white text-slate-900 focus:border-slate-400 focus:ring-4 focus:ring-slate-100'
                       }`}
                       placeholder="Enter Patient ID"
                     />
@@ -480,13 +480,13 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="mb-6">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Access Code</label>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Access Code</label>
                   <input
                     type="text"
                     value={accessCode}
                     onChange={(e) => setAccessCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    className="w-full px-4 py-4 text-center text-2xl font-bold tracking-widest bg-white text-gray-900 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 outline-none transition-all"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-4 text-center font-mono text-[1.7rem] font-medium tracking-[0.28em] text-slate-900 outline-none transition-all focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
                     placeholder="000000"
                     maxLength={6}
                     autoFocus={!!prefilledId || accessCode.length === 0}
@@ -500,7 +500,7 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={isLoggingIn || !!patientLockoutMessage || accessCode.length < 6 || (!prefilledId && !manualPatientId)}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 group"
+                  className="group flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3.5 font-semibold text-white transition-all hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {isLoggingIn ? 'Checking...' : 'Track My Pet'}
                   {!isLoggingIn && <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />}
@@ -513,27 +513,27 @@ export default function App() {
       case 'landing':
       default:
         return (
-          <div className="max-w-md mx-auto mt-10">
-            <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 text-center border-4 border-white/50 bg-clip-padding">
-              <div className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl rotate-3 hover:rotate-6 transition-transform duration-300">
-                <Activity className="text-white w-12 h-12" strokeWidth={2.5} />
+          <div className="mx-auto mt-14 w-full max-w-lg px-2">
+            <div className="rounded-[2rem] border border-slate-200/70 bg-white/95 p-10 text-center shadow-[0_24px_70px_rgba(15,23,42,0.08)] backdrop-blur-sm md:p-12">
+              <div className="mx-auto mb-9 flex h-20 w-20 items-center justify-center rounded-3xl bg-slate-900/95 shadow-[0_18px_35px_rgba(15,23,42,0.22)]">
+                <Activity className="h-10 w-10 text-slate-50" strokeWidth={2.2} />
               </div>
 
-              <h1 className="text-3xl font-extrabold text-gray-900 mb-3 tracking-tight">{CLINIC_CONFIG.name}</h1>
-              <p className="text-gray-500 mb-10 text-lg leading-relaxed">Real-time updates for peace of mind.</p>
+              <h1 className="mb-3 text-[2rem] font-semibold tracking-tight text-slate-900">{CLINIC_CONFIG.name}</h1>
+              <p className="mx-auto mb-10 max-w-sm text-[15px] leading-relaxed text-slate-500">Real-time updates for peace of mind.</p>
 
               <div className="space-y-4">
                 <button
                   onClick={() => setView('patient-login')}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3 group"
+                  className="group flex w-full items-center justify-center gap-3 rounded-xl bg-slate-900 px-6 py-3.5 font-semibold text-white transition-all hover:bg-slate-700"
                 >
-                  <User size={20} className="text-indigo-100 group-hover:text-white transition-colors" />
+                  <User size={20} className="text-slate-300 group-hover:text-white transition-colors" />
                   Patient Login
                 </button>
 
                 <button
                   onClick={() => setView(session ? 'staff-dashboard' : 'staff-login')}
-                  className="w-full bg-white border-2 border-gray-100 hover:border-gray-200 text-gray-700 font-bold py-4 px-6 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-3 group"
+                  className="group flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-6 py-3.5 font-semibold text-slate-700 transition-all hover:border-slate-300"
                 >
                   <Lock size={20} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
                   Staff Portal
@@ -550,8 +550,8 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F3F4F6] relative overflow-hidden font-sans">
-      <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-b-[3rem] shadow-2xl z-0"></div>
+    <div className="relative min-h-screen overflow-hidden bg-[#f7f6f3] font-sans">
+      <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_50%_-20%,rgba(148,163,184,0.14),transparent_45%),radial-gradient(circle_at_100%_0%,rgba(148,163,184,0.08),transparent_38%)]" />
       <div className="relative z-10 p-4 md:p-8">{renderContent()}</div>
     </div>
   );

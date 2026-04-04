@@ -161,7 +161,14 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
     };
   }, []);
 
-  if (loading && !patient) return <div className="flex flex-col items-center justify-center min-h-[50vh] text-gray-500"><RefreshCw className="w-8 h-8 animate-spin text-indigo-500" /></div>;
+  if (loading && !patient) return (
+    <div className="flex min-h-[58vh] flex-col items-center justify-center gap-4 text-slate-500">
+      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200">
+        <RefreshCw className="h-6 w-6 animate-spin text-slate-500" />
+      </div>
+      <p className="text-sm tracking-wide text-slate-500">Preparing your pet’s latest update…</p>
+    </div>
+  );
   if (!patient) return <div className="text-center py-12">No record found.</div>;
 
   const isDischarged = patient.status === 'discharged' || patient.status === 'archived' || patient.stage === 'discharged';
@@ -174,7 +181,7 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
   const hasLogo = !!clinicContact.logoUrl;
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="mx-auto max-w-4xl">
       {connectionBanner && (
         <div className="mb-4 rounded-xl border-2 border-red-300 bg-red-50 px-4 py-3 text-sm font-bold text-red-800 shadow-sm">
           {connectionBanner}
@@ -187,30 +194,30 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
         </div>
       )}
 
-      <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-8">
-        <div className="p-6 text-white flex justify-between items-start" style={{ backgroundColor: brandColor }}>
+      <div className="mb-8 overflow-hidden rounded-[1.8rem] border border-slate-200/80 bg-white shadow-[0_20px_65px_rgba(15,23,42,0.08)]">
+        <div className="flex items-start justify-between p-7 text-white" style={{ backgroundColor: brandColor }}>
           <div>
-            <h1 className="text-3xl font-bold">{patient.name}</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">{patient.name}</h1>
             <div className="flex items-center gap-2 mt-1">
-              <span className="px-3 py-1 rounded-full text-sm font-medium bg-white/20">{patient.owner}'s Pet</span>
+              <span className="rounded-full bg-white/20 px-3 py-1 text-sm font-medium">{patient.owner}'s Pet</span>
             </div>
           </div>
-          <button onClick={onLogout} className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg text-sm font-medium">Logout</button>
+          <button onClick={onLogout} className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/20">Logout</button>
         </div>
         
-        <div className="p-12 text-center">
-          <div className={`inline-flex p-6 rounded-full mb-6 shadow-lg scale-110 ${currentStageTheme.glow}`}>
+        <div className="p-12 text-center md:p-14">
+          <div className={`mb-7 inline-flex scale-110 rounded-full p-6 shadow-lg ${currentStageTheme.glow}`}>
             {isDischarged ? <CheckCircle className={currentStageTheme.icon} size={56} strokeWidth={1.5} /> : <currentStageConfig.icon className={currentStageTheme.icon} size={56} strokeWidth={1.5} />}
           </div>
-          <h2 className={`text-4xl font-extrabold mb-3 ${isDischarged ? 'text-emerald-600' : currentStageTheme.icon}`}>
+          <h2 className={`mb-3 text-4xl font-semibold tracking-tight ${isDischarged ? 'text-emerald-700' : currentStageTheme.icon}`}>
             {isDischarged ? 'Officially Discharged' : currentStageConfig?.label}
           </h2>
-          <p className="text-xl text-gray-600 max-w-lg mx-auto leading-relaxed italic">
+          <p className="mx-auto max-w-2xl text-[1.08rem] leading-relaxed text-slate-600">
             {isDischarged 
               ? `${patient.name} has completed care and is safely back home. This tracker is now closed, and their visit has been archived. Thank you for trusting us with your pet's care.` 
               : currentStageConfig?.description}
           </p>
-          <div className="mt-8 text-xs text-gray-300 flex items-center justify-center gap-1">
+          <div className="mt-8 flex items-center justify-center gap-1 text-xs text-slate-400">
              <RefreshCw size={10} /> Refreshed: {lastUpdated.toLocaleTimeString()}
           </div>
         </div>
@@ -227,7 +234,7 @@ export const ClientTracker: React.FC<ClientTrackerProps> = ({ patientId, accessC
                   return (
                     <React.Fragment key={stage.id}>
                       <div className="flex flex-col items-center">
-                        <p className="mb-3 text-[10px] uppercase font-bold tracking-widest text-gray-500 text-center whitespace-nowrap">
+                        <p className="mb-3 whitespace-nowrap text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                           {stage.label}
                         </p>
                         <div className="relative flex h-5 w-5 items-center justify-center">
